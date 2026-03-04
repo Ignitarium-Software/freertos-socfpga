@@ -42,62 +42,68 @@
 #define ECC_S_ERR_ADDR_B     0x38U
 #define ECC_S_ERR_CNT        0x3CU
 
-#define ECC_PENDING_ERROR_A_MASK    ((1U << 0) | (1U << 8))
-#define ECC_PENDING_ERROR_B_MASK    ((1U << 16) | (1U << 24))
-#define ECC_PENDING_SB_ERR_MASK     ((1U << 0) | (1U << 16))
-#define ECC_PENDING_DB_ERR_MASK     ((1U << 8) | (1U << 24))
-#define ECC_SBERR_PORTA_MASK        (1U << 0)
-#define ECC_DBERR_PORTA_MASK        (1U << 8)
+#define ECC_PENDING_ERROR_A_MASK    ((1U << 0U) | (1U << 8U))
+#define ECC_PENDING_ERROR_B_MASK    ((1U << 16U) | (1U << 24U))
+#define ECC_PENDING_SB_ERR_MASK     ((1U << 0U) | (1U << 16U))
+#define ECC_PENDING_DB_ERR_MASK     ((1U << 8U) | (1U << 24U))
+#define ECC_SBERR_PORTA_MASK        (1U << 0U)
+#define ECC_DBERR_PORTA_MASK        (1U << 8U)
 /* List of supported modules */
-#define ECC_MODULES_MASK        0x0001FFEU
 #define ECC_MAX_INSTANCES       13U
+#define ECC_MODULES_MASK        (((1U) << (ECC_MAX_INSTANCES)) - 2U)
 #define ECC_MEM_WAIT_TIMEOUT    10000U
 
 #define SMC_SECURE_REG_WR    0xC2000008U
 #define SMC_SECURE_REG_RD    0xC2000007U
-#define SMC_WR_REG32(address, val)    smc_io_write32(address, val)
-#define SMC_RD_REG32(address)         smc_io_read32(address)
+
+#define SMC_WR_REG32(address, val)    ecc_smc_io_write32(address, val)
+#define SMC_RD_REG32(address)         ecc_smc_io_read32(address)
 
 typedef struct
 {
     uint32_t base_addr;
     uint32_t sbe_err_cnt;
     uint32_t dbe_err_cnt;
-} ecc_blk_data;
+} ecc_blk_data_t;
 
 typedef struct
 {
-    ecc_blk_data ecc_instances[ECC_MAX_INSTANCES];
+    ecc_blk_data_t ecc_instances[ECC_MAX_INSTANCES];
     uint32_t module_init;
-    ecc_call_back user_cb;
-} ecc_handle;
+    ecc_callback_t user_cb;
+} ecc_handle_t;
 
-ecc_handle hecc;
+ecc_handle_t hecc;
 
-static inline void smc_io_write32(uint32_t addr, uint32_t val)
+static inline void ecc_smc_io_write32(uint32_t addr, uint32_t val)
 {
     uint64_t smc_args[8] = {0};
+    int ret;
     smc_args[0] = addr;
     smc_args[1] = val;
-    smc_call(SMC_SECURE_REG_WR, smc_args);
+    ret = smc_call(SMC_SECURE_REG_WR, smc_args);
+    if (ret != 0)
+    {
+        ERROR("SMC write failed (%d)", ret);
+    }
 }
 
-static inline uint32_t smc_io_read32(uint32_t addr)
+static inline uint32_t ecc_smc_io_read32(uint32_t addr)
 {
     uint64_t smc_args[8] = {0};
     smc_args[0] = addr;
     smc_call(SMC_SECURE_REG_RD, smc_args);
-    return smc_args[0];
+    return (uint32_t)smc_args[0];
 }
 
-static void process_sbe(uint32_t module_id)
+static void ecc_process_sbe(uint32_t module_id)
 {
     uint32_t err_addr;
     uint32_t sbe_status = 0U;
     uint32_t base_addr = hecc.ecc_instances[module_id].base_addr;
 
     sbe_status = RD_REG32(base_addr + ECC_INT_STAT);
-    WR_REG32(base_addr + ECC_INT_STAT, (1U << 0));
+    WR_REG32(base_addr + ECC_INT_STAT, (1U << 0U));
     if (sbe_status & ECC_PENDING_SB_ERR_MASK)
     {
         if (sbe_status & ECC_SBERR_PORTA_MASK)
@@ -110,35 +116,40 @@ static void process_sbe(uint32_t module_id)
 #if ECC_DUAL_PORT
         if (sbe_status & (1U << 16))
         {
-            WR_REG32(base_addr + ECC_INT_STAT, (1 << 16));
+            WR_REG32(base_addr + ECC_INT_STAT, (1U << 16U));
             err_addr = RD_REG32(base_addr + ECC_S_ERR_ADDR_B);
             DEBUG("Single bit error detected on PORTB");
             DEBUG("Module: %d", module_id);
             DEBUG("Error Address: 0x%08X", err_addr);
         }
 #endif
+    /*
+     * For log levels lower than DEBUG, this will throw an unused variable
+     * error.
+     */
+    (void)err_addr;
     }
 }
-static void process_dbe(uint32_t module_id)
+static void ecc_process_dbe(uint32_t module_id)
 {
     uint32_t err_addr;
     uint32_t dbe_status = 0U;
     uint32_t base_addr = hecc.ecc_instances[module_id].base_addr;
     dbe_status = RD_REG32(base_addr + ECC_INT_STAT);
-    WR_REG32(base_addr + ECC_INT_STAT, (1U << 8));
-    if (dbe_status & ECC_PENDING_SB_ERR_MASK)
+    WR_REG32(base_addr + ECC_INT_STAT, (1U << 8U));
+    if (dbe_status & ECC_PENDING_DB_ERR_MASK)
     {
-        if (dbe_status & (1U << 8))
+        if ((dbe_status & (1U << 8U)) != 0U)
         {
-            err_addr = RD_REG32(base_addr + ECC_S_ERR_ADDR_A);
+            err_addr = RD_REG32(base_addr + ECC_D_ERR_ADDR_A);
             DEBUG("Double bit error detected on PORTA");
             DEBUG("Module: %d", module_id);
             DEBUG("Error Address: 0x%08X", err_addr);
         }
 #if ECC_DUAL_PORT
-        if (sbe_status & (1U << 24))
+        if ((dbe_status & (1U << 24U)) != 0U)
         {
-            WR_REG32(base_addr + ECC_INT_STAT, (1U << 24));
+            WR_REG32(base_addr + ECC_INT_STAT, (1U << 24U));
             err_addr = RD_REG32(base_addr + ECC_D_ERR_ADDR_B);
             DEBUG("Double bit error detected on PORTB");
             DEBUG("Module: %d", module_id);
@@ -146,6 +157,7 @@ static void process_dbe(uint32_t module_id)
         }
 #endif
     }
+    (void)err_addr;
 }
 /*
  * For QSPI ECC all register access is performed via SMC calls, these
@@ -156,10 +168,10 @@ void ecc_qspi_irq_handler(void *param)
 {
     (void)param;
 
-    uint32_t err_status = 0;
+    uint32_t err_status = 0U;
     uint32_t base_addr = hecc.ecc_instances[ECC_QSPI].base_addr;
     err_status = SMC_RD_REG32(base_addr + ECC_INT_STAT);
-    if (err_status & 1)
+    if ((err_status & 1U) != 0U)
     {
         SMC_WR_REG32(base_addr + ECC_INT_STAT, ECC_SBERR_PORTA_MASK);
         if (hecc.user_cb != NULL)
@@ -169,7 +181,7 @@ void ecc_qspi_irq_handler(void *param)
         hecc.ecc_instances[ECC_QSPI].sbe_err_cnt++;
         return;
     }
-    if (err_status & (1 << 8))
+    if ((err_status & (1U << 8U)) != 0U)
     {
         SMC_WR_REG32(base_addr + ECC_INT_STAT, ECC_DBERR_PORTA_MASK);
         if (hecc.user_cb != NULL)
@@ -183,21 +195,20 @@ void ecc_qspi_irq_handler(void *param)
 void ecc_irq_handler(void *param)
 {
     (void)param;
-    int i;
     uint32_t serr_status = 0U, derr_status = 0U;
 
     derr_status = SMC_RD_REG32(
             SYS_MNGR_BASE_ADDR + SYS_MNGR_ECC_INTSTATUS_DERR);
     /* ignoring DDR errors */
-    derr_status &= derr_status & ECC_MODULES_MASK;
-    if (derr_status)
+    derr_status &= ECC_MODULES_MASK;
+    if (derr_status != 0U)
     {
         PRINT("Double bit error detected: %x", derr_status);
-        for (i = 0; i < 19; i++)
+        for (uint32_t i = 0U; i < ECC_MAX_INSTANCES; i++)
         {
-            if ((derr_status & (1U << i)) != 0)
+            if ((derr_status & (1U << i)) != 0U)
             {
-                process_dbe(i);
+                ecc_process_dbe(i);
                 hecc.ecc_instances[i].dbe_err_cnt++;
             }
         }
@@ -210,15 +221,15 @@ void ecc_irq_handler(void *param)
     serr_status = RD_REG32(
             SYS_MNGR_BASE_ADDR + SYS_MNGR_ECC_INTSTATUS_SERR);
     /* ignoring DDR errors */
-    serr_status &= serr_status & ECC_MODULES_MASK;
-    if (serr_status)
+    serr_status &= ECC_MODULES_MASK;
+    if (serr_status != 0U)
     {
         PRINT("Single bit error detected: %x", serr_status);
-        for (i = 0; i < 19; i++)
+        for (uint32_t i = 0U; i < ECC_MAX_INSTANCES; i++)
         {
-            if ((serr_status & (1U << i)) != 0)
+            if ((serr_status & (1U << i)) != 0U)
             {
-                process_sbe(i);
+                ecc_process_sbe(i);
                 hecc.ecc_instances[i].sbe_err_cnt++;
             }
         }
@@ -233,7 +244,7 @@ void ecc_irq_handler(void *param)
  * the register access should be done using secure register read and
  * write
  */
-static int ecc_enable_qspi()
+static int ecc_enable_qspi(void)
 {
     uint32_t reg_val, retry_count = 0;
     uint32_t base_addr = hecc.ecc_instances[ECC_QSPI].base_addr;
@@ -242,7 +253,7 @@ static int ecc_enable_qspi()
 
     /* Disable ECC correction and detection */
     reg_val = SMC_RD_REG32(base_addr + ECC_CTRL);
-    reg_val &= (0);
+    reg_val &= ~(1U << 0);
     SMC_WR_REG32(base_addr + ECC_CTRL, reg_val);
 
     /* Start hardware memory initialization PORTA */
@@ -251,7 +262,7 @@ static int ecc_enable_qspi()
     SMC_WR_REG32(base_addr + ECC_CTRL, reg_val);
 
     /* Wait for PORTA memory initialization */
-    while (!(SMC_RD_REG32(base_addr + ECC_INIT_STAT) & (1U)))
+    while ((SMC_RD_REG32(base_addr + ECC_INIT_STAT) & 1U) == 0U)
     {
         retry_count++;
         if (retry_count >= ECC_MEM_WAIT_TIMEOUT)
@@ -263,14 +274,14 @@ static int ecc_enable_qspi()
     }
     /* Enabling ECC detection and correction */
     reg_val = SMC_RD_REG32(base_addr + ECC_CTRL);
-    reg_val |= (1U << 0);
+    reg_val |= (1U << 0U);
     SMC_WR_REG32(base_addr + ECC_CTRL, reg_val);
     reg_val = SMC_RD_REG32(base_addr + ECC_CTRL);
 
     /* Enable single bit error interrupt */
     SMC_WR_REG32(base_addr + ECC_ERR_INT_EN, 1U);
 
-    hecc.module_init |= 1 << (ECC_QSPI);
+    hecc.module_init |= (1U << ECC_QSPI);
     return 0;
 }
 int ecc_enable_modules(uint32_t modules)
@@ -278,25 +289,25 @@ int ecc_enable_modules(uint32_t modules)
     uint32_t reg_val, base_addr;
     uint32_t retry_count = 0;
 
-    if (!(modules & ECC_MODULES_MASK))
+    if ((modules & ECC_MODULES_MASK) == 0U)
     {
         ERROR("Invalid ECC module list");
         return -EINVAL;
     }
-    for (uint32_t i = 0; i < ECC_MAX_INSTANCES; i++)
+    for (uint32_t i = 0U; i < ECC_MAX_INSTANCES; i++)
     {
-        if ((modules & (1U << i)) == 0)
+        if ((modules & (1U << i)) == 0U)
         {
             /* Module not enabled */
             continue;
         }
-        if (hecc.module_init & (1U << i) != 0)
+        if ((hecc.module_init & (1U << i)) != 0U)
         {
-            ERROR("ECC module %d already initialized", 1 << i);
+            ERROR("ECC module %u already initialized", (unsigned int)i);
             return -EINVAL;
         }
         base_addr = hecc.ecc_instances[i].base_addr;
-        if (hecc.ecc_instances[i].base_addr == 0)
+        if (base_addr == 0U)
         {
             ERROR("ECC not initialized");
             return -EINVAL;
@@ -310,22 +321,22 @@ int ecc_enable_modules(uint32_t modules)
 
         /* Disable ECC correction and detection */
         reg_val = RD_REG32(base_addr + ECC_CTRL);
-        reg_val &= ~(1U << 0);
+        reg_val &= ~(1U << 0U);
         WR_REG32(base_addr + ECC_CTRL, reg_val);
 
         /* Start hardware memory initialization PORTA */
         reg_val = RD_REG32(base_addr + ECC_CTRL);
-        reg_val |= (1U << 16);
+        reg_val |= (1U << 16U);
         WR_REG32(base_addr + ECC_CTRL, reg_val);
 
         /* Wait for PORTA memory initialization */
-        while (!(RD_REG32(base_addr + ECC_INIT_STAT) & (1U)))
+        while ((RD_REG32(base_addr + ECC_INIT_STAT) & 1U) == 0U)
         {
             retry_count++;
             if (retry_count >= ECC_MEM_WAIT_TIMEOUT)
             {
-                ERROR("Module %x: PORT A timeout", 1 << i);
-                ERROR("Failed to initialize ECC module %x", 1 << i);
+                ERROR("Module %x: PORT A timeout", (1U << i));
+                ERROR("Failed to initialize ECC module %x", (1U << i));
                 return -EIO;
             }
         }
@@ -335,17 +346,17 @@ int ecc_enable_modules(uint32_t modules)
     #if ECC_DUAL_PORT
         /* Start hardware memory initialization PORTB */
         reg_val = SMC_RD_REG32(base_addr + ECC_CTRL);
-        reg_val |= (1U << 24);
+        reg_val |= (1U << 24U);
         WR_REG32(base_addr + ECC_CTRL, reg_val);
 
         /* Wait for PORTA memory initialization */
-        while (!(RD_REG32(base_addr + ECC_INIT_STAT) & (1U << 8)))
+        while ((RD_REG32(base_addr + ECC_INIT_STAT) & (1U << 8U)) == 0U)
         {
             retry_count++;
             if (retry_count >= ECC_MEM_WAIT_TIMEOUT)
             {
-                ERROR("Module %d: PORT B timeout", ecc_module);
-                return;
+                ERROR("Module %x: PORT B timeout", (1U << i));
+                return -EIO;
             }
         }
         /* Clear pending interrupt */
@@ -357,31 +368,31 @@ int ecc_enable_modules(uint32_t modules)
 
         /* Enable interrupt on distinct error */
         reg_val = RD_REG32(base_addr + ECC_INT_MODE);
-        reg_val |= (1U << 0);
+        reg_val |= (1U << 0U);
         WR_REG32(base_addr + ECC_INT_MODE, reg_val);
 
         /*Enabling ECC detection and correction*/
         reg_val = RD_REG32(base_addr + ECC_CTRL);
-        reg_val |= (1U << 0);
+        reg_val |= (1U << 0U);
         WR_REG32(base_addr + ECC_CTRL, reg_val);
 
         /*Enable single bit error interrupt */
         WR_REG32(base_addr + ECC_ERR_INT_SET, 1U);
 
         /* Enable ECC interrupts for initialized modules */
-        SMC_WR_REG32(SYS_MNGR_BASE_ADDR + SYS_MNGR_ECC_INTMASK_CLR, 1 << i);
+        SMC_WR_REG32(SYS_MNGR_BASE_ADDR + SYS_MNGR_ECC_INTMASK_CLR, (1U << i));
 
         hecc.module_init |= (1U << i);
     }
     return 0;
 }
 
-int ecc_init()
+int ecc_init(void)
 {
     BaseType_t ret;
 
     /* Disabling ECC interrupts */
-    SMC_WR_REG32(SYS_MNGR_BASE_ADDR + SYS_MNGR_ECC_INTMASK_SET, 0x7FFFE);
+    SMC_WR_REG32(SYS_MNGR_BASE_ADDR + SYS_MNGR_ECC_INTMASK_SET, 0x7FFFEU);
 
     /* Single bit error interrupt */
     ret = interrupt_register_isr(SERR_GLOBAL, ecc_irq_handler, NULL);
@@ -396,8 +407,7 @@ int ecc_init()
     }
 
     /* Single bit error interrupt for QSPI */
-    ret = interrupt_register_isr(SDM_HPS_SPARE_INTR1, ecc_qspi_irq_handler,
-            NULL);
+    ret = interrupt_register_isr(SDM_HPS_SPARE_INTR1, ecc_qspi_irq_handler, NULL);
     if (ret != 0)
     {
         return -EIO;
@@ -421,8 +431,7 @@ int ecc_init()
     }
 
     /* Double bit error interrupt for QSPI */
-    ret = interrupt_register_isr(SDM_HPS_SPARE_INTR2, ecc_qspi_irq_handler,
-            NULL);
+    ret = interrupt_register_isr(SDM_HPS_SPARE_INTR2, ecc_qspi_irq_handler, NULL);
     if (ret != 0)
     {
         return -EIO;
@@ -449,7 +458,7 @@ int ecc_init()
     return 0;
 }
 
-int ecc_set_callback(void *user_callback)
+int ecc_set_callback(ecc_callback_t user_callback)
 {
     if (user_callback == NULL)
     {
@@ -462,8 +471,16 @@ int ecc_set_callback(void *user_callback)
 
 int ecc_inject_error(uint32_t ecc_module, uint32_t error_type)
 {
-    uint32_t base_addr = hecc.ecc_instances[ecc_module].base_addr;
-    if ((base_addr == 0))
+    uint32_t base_addr;
+
+    if (ecc_module >= ECC_MAX_INSTANCES)
+    {
+        ERROR("Invalid ECC module %u", (unsigned int)ecc_module);
+        return -EINVAL;
+    }
+
+    base_addr = hecc.ecc_instances[ecc_module].base_addr;
+    if (base_addr == 0U)
     {
         ERROR("ECC module %d not initialized", ecc_module);
         return -EINVAL;

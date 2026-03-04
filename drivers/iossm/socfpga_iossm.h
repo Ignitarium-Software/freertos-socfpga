@@ -57,6 +57,7 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #define IOSSM_ECC_CRCT_EVENT_DET          (1U << 0U)   /*!< Single ECC correctable event detected. */
 #define IOSSM_MUL_ECC_CRCT_EVENT_DET      (1U << 1U)   /*!< Multiple ECC correctable events detected. */
@@ -90,7 +91,7 @@
  * @brief  IOSSM callback function type
  * @ingroup iossm_fns
  */
-typedef void (*iossm_cb_handler)(void);
+typedef void (*iossm_cb_handler_t)(void);
 
 /**
  * @addtogroup iossm_enums
@@ -106,7 +107,7 @@ typedef enum
     IOSSM_ECC_NO_TRIG,         /*!< ECC enabled but no trigger on error. */
     IOSSM_ECC_DETECT,          /*!< ECC enabled with error detection only. */
     IOSSM_ECC_DETECT_CORRECT   /*!< ECC enabled with error detection and correction. */
-} ecc_modes;
+} iossm_ecc_mode_t;
 
 
 /**
@@ -116,7 +117,7 @@ typedef enum
 {
     IOSSM_OUT_OF_BAND, /*!< ECC is stored out-of-band (separately from the main data). */
     IOSSM_IN_LINE      /*!< ECC is stored in-line (alongside the main data). */
-} ecc_type;
+} iossm_ecc_type_t;
 
 /**
  * @}
@@ -135,9 +136,9 @@ typedef struct
     uint32_t iossm_base_addr;           /*!< Base address of the IOSSM instance. */
     uint8_t iossm_ip_type;              /*!< IP type identifier for the IOSSM instance. */
     uint8_t iossm_instance_id;          /*!< Unique instance ID of the IOSSM. */
-    iossm_cb_handler iossm_cb_fun;      /*!< Callback function for IOSSM event handling. */
+    iossm_cb_handler_t iossm_cb_fun;    /*!< Callback function for IOSSM event handling. */
     bool iossm_instance_is_open;        /*!< Indicates whether the IOSSM instance is open (true) or closed (false). */
-} xiossm_context;
+} iossm_context_t;
 
 /**
  * @brief Hold error information reported by the IOSSM ECC handler.
@@ -171,7 +172,7 @@ typedef struct
  * - NULL if Invalid iossm instance.
  * - NULL if same instance already opened.
  */
-xiossm_context *iossm_open(uint32_t instance);
+iossm_context_t *iossm_open(uint32_t instance);
 
 /**
  * @brief Close the iossm instance.
@@ -195,7 +196,7 @@ int32_t iossm_close(uint32_t instance);
  * - -EINVAL: if invalid instance id
  * - -EIO:    if the instance is not opened.
  */
-int32_t iossm_read_ecc_status(const xiossm_context *xhandle);
+int32_t iossm_read_ecc_status(const iossm_context_t *xhandle);
 
 /**
  * @brief Mask the ecc interrupt on I096B.
@@ -210,7 +211,7 @@ int32_t iossm_read_ecc_status(const xiossm_context *xhandle);
  *     - the instance is not opened.
  *     - if the response has failed.
  */
-int32_t iossm_mask_int(const xiossm_context *xhandle, uint32_t interrupts);
+int32_t iossm_mask_int(const iossm_context_t *xhandle, uint32_t interrupts);
 
 /**
  * @brief Inject single bit error.
@@ -224,7 +225,7 @@ int32_t iossm_mask_int(const xiossm_context *xhandle, uint32_t interrupts);
  *     - the instance is not opened.
  *     - if the response has failed.
  */
-int32_t iossm_inject_sbit_err(const xiossm_context *xhandle);
+int32_t iossm_inject_sbit_err(const iossm_context_t *xhandle);
 
 /**
  * @brief Inject double bit error.
@@ -238,7 +239,7 @@ int32_t iossm_inject_sbit_err(const xiossm_context *xhandle);
  *     - the instance is not opened.
  *     - if the response has failed.
  */
-int32_t iossm_inject_dbit_err(const xiossm_context *xhandle);
+int32_t iossm_inject_dbit_err(const iossm_context_t *xhandle);
 
 /**
  * @brief Acknowledge ecc interrupt status.
@@ -253,7 +254,7 @@ int32_t iossm_inject_dbit_err(const xiossm_context *xhandle);
  *     - the instance is not opened.
  *     - if the response has failed.
  */
-int32_t iossm_ack_int(const xiossm_context *xhandle, uint32_t interrupts);
+int32_t iossm_ack_int(const iossm_context_t *xhandle, uint32_t interrupts);
 
 /**
  * @brief set iossm interrupt call back function.
@@ -262,7 +263,7 @@ int32_t iossm_ack_int(const xiossm_context *xhandle, uint32_t interrupts);
  * @param[in] call_back_fun Call back function pointer.
  *
  */
-void iossm_set_callback(xiossm_context *xhandle, iossm_cb_handler
+void iossm_set_callback(iossm_context_t *xhandle, iossm_cb_handler_t
         call_back_fun);
 
 
@@ -278,7 +279,7 @@ void iossm_set_callback(xiossm_context *xhandle, iossm_cb_handler
  *     - the instance is not opened.
  *     - if the response has failed.
  */
-int32_t iossm_clear_ecc_buffer(const xiossm_context *xhandle);
+int32_t iossm_clear_ecc_buffer(const iossm_context_t *xhandle);
 
 /**
  * @brief get the error type from error index.
@@ -291,7 +292,7 @@ int32_t iossm_clear_ecc_buffer(const xiossm_context *xhandle);
  * - -EINVAL: if iossm handle is NULL.
  * - -EIO:    if the instance is not opened.
  */
-int32_t iossm_get_err_type(const xiossm_context *xhandle, uint32_t index);
+int32_t iossm_get_err_type(const iossm_context_t *xhandle, uint32_t index);
 
 /**
  * @brief get the error address offset from error index.
@@ -300,7 +301,7 @@ int32_t iossm_get_err_type(const xiossm_context *xhandle, uint32_t index);
  * @param[in] index   index of the error (usually got from status register)
  *
  */
-int32_t iossm_get_err_addr_offset(const xiossm_context *xhandle, uint32_t
+int32_t iossm_get_err_addr_offset(const iossm_context_t *xhandle, uint32_t
         index);
 /**
  * @}

@@ -2,6 +2,7 @@
  * The MIT License (MIT)
  *
  * Copyright (c) 2019 Ha Thach (tinyusb.org)
+ * Copyright (c) 2025-2026 Altera Corporation.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -55,6 +56,7 @@ extern "C"
 
 #define OSAL_KERNEL_RUNNING        0
 #define OSAL_KERNEL_NOT_RUNNING    1
+#define OSAL_KERNEL_NOT_STARTED    2
 //--------------------------------------------------------------------+
 // MACRO CONSTANT TYPEDEF PROTYPES
 //--------------------------------------------------------------------+
@@ -72,6 +74,8 @@ typedef SemaphoreHandle_t osal_semaphore_t;
 typedef SemaphoreHandle_t osal_mutex_t;
 typedef QueueHandle_t osal_queue_t;
 typedef StreamBufferHandle_t osal_pipe_t;
+typedef void (* osal_pipe_cb_t)( osal_pipe_t pipe, long is_isr,
+                                long * const need_ctx_sw );
 
 typedef struct
 {
@@ -309,9 +313,10 @@ TU_ATTR_ALWAYS_INLINE static inline bool osal_queue_empty( osal_queue_t qhdl )
     return uxQueueMessagesWaiting(qhdl) == 0;
 }
 
-TU_ATTR_ALWAYS_INLINE static inline osal_pipe_t osal_pipe_create(uint32_t stream_size)
+TU_ATTR_ALWAYS_INLINE static inline osal_pipe_t osal_pipe_create(uint32_t stream_size,
+                            osal_pipe_cb_t read_cb, osal_pipe_cb_t write_cb)
 {
-    return xStreamBufferCreate(stream_size, 1);
+    return xStreamBufferCreateWithCallback(stream_size, 1, write_cb, read_cb);
 }
 
 TU_ATTR_ALWAYS_INLINE static inline uint32_t osal_pipe_send(osal_pipe_t phndl, uint8_t * data, uint32_t size)
@@ -319,7 +324,7 @@ TU_ATTR_ALWAYS_INLINE static inline uint32_t osal_pipe_send(osal_pipe_t phndl, u
     int bytes_written = 0;
     if ( !xPortIsInsideInterrupt() )
     {
-        bytes_written = xStreamBufferSend(phndl, data, size, pdMS_TO_TICKS(100));
+        bytes_written = xStreamBufferSend(phndl, data, size, 0);
     }
     else
     {
@@ -353,15 +358,33 @@ TU_ATTR_ALWAYS_INLINE static inline uint32_t osal_pipe_bytes_available(osal_pipe
     return xStreamBufferBytesAvailable(phndl);
 }
 
+TU_ATTR_ALWAYS_INLINE static inline uint32_t osal_pipe_space_available(osal_pipe_t phndl)
+{
+    return xStreamBufferSpacesAvailable(phndl);
+}
+
+/* When calling within a task,
+ * wrap the call inside a critical section
+ * */
 TU_ATTR_ALWAYS_INLINE static inline uint32_t osal_get_kernel_state()
 {
     uint32_t state;
-    switch(xTaskGetSchedulerState())
+    BaseType_t xShedState;
+
+#if configNUMBER_OF_CORES > 1
+    xShedState = xTaskGetSchedulerStateFromISR();
+#else
+    xShedState = xTaskGetSchedulerState();
+#endif
+
+    switch(xShedState)
     {
         case taskSCHEDULER_RUNNING:
             state = OSAL_KERNEL_RUNNING;
             break;
         case taskSCHEDULER_NOT_STARTED:
+            state = OSAL_KERNEL_NOT_STARTED;
+            break;
         case taskSCHEDULER_SUSPENDED:
         default:
             state = OSAL_KERNEL_NOT_RUNNING;
@@ -387,6 +410,11 @@ TU_ATTR_ALWAYS_INLINE static inline void osal_exit_critical()
 TU_ATTR_ALWAYS_INLINE static inline void osal_delay_ms( uint64_t msec )
 {
     vTaskDelay(pdMS_TO_TICKS(msec));
+}
+
+TU_ATTR_ALWAYS_INLINE static inline void osal_assert( bool expression )
+{
+    configASSERT(expression);
 }
 
 #ifdef __cplusplus

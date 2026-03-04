@@ -61,6 +61,8 @@
 #define EEPROM_WR_ENABLE     0x06
 #define EEPROM_RD_SR         0x05
 #define EEPROM_WR_SR         0x01
+#define EEPROM_WIP_MASK      0x01
+#define EEPROM_WIP_TIMEOUT_MS 10
 
 /**
  * Configurable parameters for EEPROM data transfer
@@ -98,6 +100,49 @@ int32_t eeprom_enable_write()
 }
 
 /**
+ * @brief Read EEPROM status register
+ */
+static int32_t eeprom_read_status(uint8_t *status)
+{
+    uint8_t cmd[2] = { EEPROM_RD_SR, 0x00 };
+    uint8_t rx[2] = { 0 };
+
+    if ((status == NULL) || (spi_transfer_sync(spi_handle, cmd, rx, 2) != 0))
+    {
+        return 0;
+    }
+
+    *status = rx[1];
+    return 1;
+}
+
+/**
+ * @brief Wait until EEPROM write cycle completes
+ */
+static int32_t eeprom_wait_ready(void)
+{
+    uint8_t status = 0;
+    uint64_t delay_ticks = 5;
+
+    for (uint32_t i = 0; i < EEPROM_WIP_TIMEOUT_MS; i++)
+    {
+        if (eeprom_read_status(&status) != 1)
+        {
+            return 0;
+        }
+
+        if ((status & EEPROM_WIP_MASK) == 0U)
+        {
+            return 1;
+        }
+
+        osal_delay_ms(delay_ticks);
+    }
+
+    return 0;
+}
+
+/**
  * @brief Send write command followed by address and data to EEPROM
  *
  * Only one page can be written at a time.
@@ -108,6 +153,12 @@ int32_t eeprom_write(uint8_t *buf, size_t size, uint16_t mem_add)
 {
     uint8_t cmd[150] = { 0 };
     uint8_t rx_count = 0, i = 0;
+
+    if (eeprom_enable_write() != 1)
+    {
+        return 0;
+    }
+
     cmd[0] = EEPROM_WRITE;
     cmd[1] = (mem_add >> 8) & 0xFF;
     cmd[2] = mem_add & 0xFF;
@@ -123,6 +174,12 @@ int32_t eeprom_write(uint8_t *buf, size_t size, uint16_t mem_add)
     {
         return 0;
     }
+
+    if (eeprom_wait_ready() != 1)
+    {
+        return 0;
+    }
+
     return 1;
 }
 
@@ -159,7 +216,7 @@ void spi_task(void)
     uint8_t rd_buf[30] = { 0 };
     uint8_t wr_buf[24] =
     {
-        0x0, 0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb,
+        0x2, 0x21, 0x22, 0x23, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb,
         0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17
     };
 

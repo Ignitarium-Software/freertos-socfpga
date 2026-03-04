@@ -99,6 +99,13 @@ spi_handle_t spi_open(uint32_t instance)
     handle->mutex = osal_mutex_create(&handle->mutex_mem);
     handle->sem = osal_semaphore_create(&handle->sem_mem);
 
+    if ((handle->mutex == NULL) || (handle->sem == NULL))
+    {
+        handle->is_open = 0;
+        ERROR("Failed to create SPI synchronization primitives");
+        return NULL;
+    }
+
     spi_init(instance);
 
     spi_disable_interrupt(handle->base_address, SPI_ALL_INTERRUPTS);
@@ -135,7 +142,7 @@ int32_t spi_ioctl(spi_handle_t const hspi, spi_ioctl_t cmd, void *const buf)
     };
     int32_t result = 0;
 
-    if (!(spi_is_handle_valid(hspi)))
+    if (spi_is_handle_valid(hspi) == 0)
     {
         ERROR("SPI Handle is invalid");
         return -EINVAL;
@@ -204,10 +211,8 @@ int32_t spi_ioctl(spi_handle_t const hspi, spi_ioctl_t cmd, void *const buf)
 /**
  * @brief Start SPI transfer
  */
-static void spi_transfer(spi_handle_t hspi, uint8_t *buffer, uint16_t nbytes)
+static void spi_transfer(spi_handle_t hspi, uint16_t nbytes)
 {
-    uint16_t byte_count = 0;
-
     hspi->tx_bytes_left = nbytes;
     hspi->rx_bytes_left = nbytes;
 
@@ -223,7 +228,7 @@ int32_t spi_transfer_sync(spi_handle_t const hspi,
 {
     BaseType_t rx_sem_return;
 
-    if (!(spi_is_handle_valid(hspi)) || (txbuf == NULL) || (nbytes == 0U))
+    if ((spi_is_handle_valid(hspi) == 0) || (txbuf == NULL) || (nbytes == 0U))
     {
         ERROR("Invalid SPI handle or buffer");
         return -EINVAL;
@@ -231,7 +236,7 @@ int32_t spi_transfer_sync(spi_handle_t const hspi,
 
     if (osal_mutex_lock(hspi->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (!hspi->is_open)
+        if (hspi->is_open == 0)
         {
             if (osal_mutex_unlock(hspi->mutex) == false)
             {
@@ -278,7 +283,7 @@ int32_t spi_transfer_sync(spi_handle_t const hspi,
     }
 
     INFO("Starting SPI transfer in sync mode for %u bytes", nbytes);
-    spi_transfer(hspi, txbuf, nbytes);
+    spi_transfer(hspi, nbytes);
     rx_sem_return = osal_semaphore_wait(hspi->sem, OSAL_TIMEOUT_WAIT_FOREVER);
 
     if (rx_sem_return != 0)
@@ -299,7 +304,7 @@ int32_t spi_transfer_async(spi_handle_t const hspi,
         uint8_t *const txbuf, uint8_t *const rxbuf, uint16_t nbytes)
 {
 
-    if (!(spi_is_handle_valid(hspi)) || (txbuf == NULL) || (rxbuf == NULL) ||
+    if ((spi_is_handle_valid(hspi) == 0) || (txbuf == NULL) || (rxbuf == NULL) ||
             (nbytes == 0U))
     {
         ERROR("Invalid SPI handle or buffer");
@@ -308,7 +313,7 @@ int32_t spi_transfer_async(spi_handle_t const hspi,
 
     if (osal_mutex_lock(hspi->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (!hspi->is_open)
+        if (hspi->is_open == 0)
         {
             if (osal_mutex_unlock(hspi->mutex) == false)
             {
@@ -355,13 +360,19 @@ int32_t spi_transfer_async(spi_handle_t const hspi,
 
     INFO("Starting SPI transfer in async mode for %u bytes", nbytes);
     spi_set_transfermode(hspi->base_address, SPI_TX_RX_MOD);
-    spi_transfer(hspi, txbuf, nbytes);
+    spi_transfer(hspi, nbytes);
 
     return 0;
 }
 
 int32_t spi_select_slave(spi_handle_t const hspi, uint32_t ss)
 {
+    if (spi_is_handle_valid(hspi) == 0)
+    {
+        ERROR("Invalid SPI handle");
+        return -EINVAL;
+    }
+
     if ((ss < 1U) || (ss > 4U))
     {
         ERROR("Invalid instance or slave ID");
@@ -382,12 +393,12 @@ int32_t spi_cancel(spi_handle_t const hspi)
 
 int32_t spi_close(spi_handle_t const hspi)
 {
-    if (!spi_is_handle_valid(hspi))
+    if (spi_is_handle_valid(hspi) == 0)
     {
         ERROR("Invalid SPI handle");
         return -EINVAL;
     }
-    if (!hspi->is_open)
+    if (hspi->is_open == 0)
     {
         ERROR("SPI instance not open");
         return -EINVAL;

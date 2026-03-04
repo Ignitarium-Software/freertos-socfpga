@@ -892,7 +892,7 @@ int32_t i3c_transfer_async(uint8_t instance, uint8_t address,
         ERROR("I3C bus is busy");
         return -EBUSY;
     }
-    i3c_obj[instance].is_busy == true;
+    i3c_obj[instance].is_busy = true;
 
     for (idx = 0; (ret == 0) && (idx < i3c_obj[instance].num_attached_dev);
             idx++)

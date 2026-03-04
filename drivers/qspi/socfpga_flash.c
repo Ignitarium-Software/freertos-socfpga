@@ -422,7 +422,7 @@ int flash_write_async(flash_handle_t flash_handle, uint32_t address,
     }
     if (osal_mutex_lock(flash_handle->desc.mutex, FLASH_MAX_WAIT_TIME))
     {
-        if (!(flash_handle->is_open))
+        if (flash_handle->is_open == 0)
         {
             ERROR("Device is not open");
             if (osal_mutex_unlock(flash_handle->desc.mutex) == false)
@@ -588,7 +588,7 @@ int flash_read_async(flash_handle_t flash_handle, uint32_t address,
     }
     if (osal_mutex_lock(flash_handle->desc.mutex, FLASH_MAX_WAIT_TIME))
     {
-        if (!(flash_handle->is_open))
+        if (flash_handle->is_open == 0)
         {
             ERROR("Device is not open");
             if (osal_mutex_unlock(flash_handle->desc.mutex) == false)
@@ -649,7 +649,7 @@ int flash_close(flash_handle_t flash_handle)
         return -EINVAL;
     }
 
-    if (!(flash_handle->is_open))
+    if (flash_handle->is_open == 0)
     {
         ERROR("Device is not open");
         return -EINVAL;

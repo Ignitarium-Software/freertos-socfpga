@@ -1,6 +1,7 @@
 /*
  * FreeRTOS+TCP V3.1.0
  * Copyright (C) 2022 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,10 +24,6 @@
  *
  * http://aws.amazon.com/freertos
  * http://www.FreeRTOS.org
- */
-
-/*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
  *
  * HAL driver implementation for PHY. Modified for SoC FPGA
  */
@@ -145,7 +142,6 @@ int32_t xgmac_phy_initialize(xgmac_handle_t hxgmac, xgmac_phy_config_t *pphy_con
 
 int32_t xgmac_cfg_speed_mode(xgmac_handle_t hxgmac, xgmac_phy_config_t *pphy_config)
 {
-    uint32_t val;
     xgmac_base_addr_t xgmac_base_addr = xgmac_get_inst_base_addr(hxgmac);
     if (xgmac_base_addr == 0U)
     {
@@ -223,11 +219,8 @@ static Basetype_t phy_set_parameters(uint32_t base_address, xgmac_phy_config_t *
 {
     uint32_t data;
     Basetype_t ret_val;
-    volatile uint8_t max_count = 0U;
-    uint16_t cont_reg2;
     int task_timeout = 0;
     bool status = true;
-    int32_t ret;
 
     /* Select the speed -> If auto-negotiation not enable set the speed
      * manually in copper control register

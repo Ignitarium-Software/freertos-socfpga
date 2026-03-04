@@ -88,8 +88,8 @@ int init_xhc_event_ring(struct xhci_data *xhci_ptr)
     reg_val |= XHCI_EVENT_RING_TABLE_SZ;
     WR_REG32((rt_base_addr + USB3_ERSTSZ), reg_val);
 
-    xer_ring->erst_ptr = (xhci_erst_entry *)(uintptr_t) pvPortAlignedAlloc(64,
-            1U * sizeof(xhci_erst_entry));
+    xer_ring->erst_ptr = (xhci_erst_entry_t *)(uintptr_t) pvPortAlignedAlloc(64,
+            1U * sizeof(xhci_erst_entry_t));
     if (xer_ring->erst_ptr == NULL)
     {
         ERROR("Canot allocate memory!!!");
@@ -107,7 +107,7 @@ int init_xhc_event_ring(struct xhci_data *xhci_ptr)
         return ret;
     }
 
-    bzero(xer_ring->erst_ptr, sizeof(xhci_erst_entry));
+    bzero(xer_ring->erst_ptr, sizeof(xhci_erst_entry_t));
 
     xer_ring->xer_enqueue_ptr = (xhci_trb_t *)(uintptr_t) pvPortAlignedAlloc(64,
             XHCI_EVENT_RING_SEG_LENTH * sizeof(xhci_trb_t));
@@ -151,7 +151,7 @@ int init_xhc_event_ring(struct xhci_data *xhci_ptr)
     WR_REG64((rt_base_addr + USB3_ERDP_LO), erdp_reg_val);
 
     cache_force_write_back((void *)(uintptr_t) xer_ring->erst_ptr,
-            sizeof(xhci_erst_entry));
+            sizeof(xhci_erst_entry_t));
     cache_force_write_back((void *)(uintptr_t) xer_ring->xer_enqueue_ptr,
             XHCI_EVENT_RING_SEG_LENTH * sizeof(xhci_trb_t));
 

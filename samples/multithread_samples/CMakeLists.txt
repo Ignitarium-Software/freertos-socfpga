@@ -46,7 +46,6 @@ set(SAMPLE_SRCS
 	${CMAKE_SOURCE_DIR}/../bridge/bridge_sample.c
 	${CMAKE_SOURCE_DIR}/../bridge/hps2fpga_bridge.c
 	${CMAKE_SOURCE_DIR}/../bridge/lwhps2fpga_bridge.c
-	${CMAKE_SOURCE_DIR}/../bridge/socfpga_mmc.c
 	${CMAKE_SOURCE_DIR}/../fatfs/fatfs_sample.c
 	${CMAKE_SOURCE_DIR}/../fcs/fcs_sample.c
 	${CMAKE_SOURCE_DIR}/../i2c/i2c_sample.c
@@ -58,11 +57,12 @@ set(SAMPLE_SRCS
 	${CMAKE_SOURCE_DIR}/../spi/spi_sample.c
 	${CMAKE_SOURCE_DIR}/../timer/timer_sample.c
 	${CMAKE_SOURCE_DIR}/../usb3/usb3_sample.c
+	${freertos_SOURCE_DIR}/samples/common/socfpga_mmc.c
 	)
 
 target_include_directories(${PROJECT_NAME}.elf
 	PRIVATE
-	${CMAKE_SOURCE_DIR}/../bridge/
+	${freertos_SOURCE_DIR}/samples/common/
 	)
 # sources
 target_sources(${PROJECT_NAME}.elf

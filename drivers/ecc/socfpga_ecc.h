@@ -73,7 +73,7 @@
  * @brief  ecc callback function type
  * @ingroup ecc_fns
  */
-typedef void (*ecc_call_back)(uint32_t error_type);
+typedef void (*ecc_callback_t)(uint32_t error_type);
 
 /**
  * @addtogroup ecc_fns
@@ -87,7 +87,7 @@ typedef void (*ecc_call_back)(uint32_t error_type);
  * - 0 on success.
  * - -EIO if error in setting interrupt.
  */
-int ecc_init();
+int ecc_init(void);
 
 /**
  * @brief  Used to inject single or double bit error.
@@ -121,7 +121,7 @@ int ecc_enable_modules(uint32_t modules);
  * - 0:       on success.
  * - -EINVAL: if invalid parameters are passed.
  */
-int ecc_set_callback(void *user_callback);
+int ecc_set_callback(ecc_callback_t user_callback);
 
 /**
  * @brief  Used to get single bit error count for a specified module.

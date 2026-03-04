@@ -36,6 +36,8 @@ typedef enum
 void uart_init(uint32_t instance);
 void uart_deinit(uint32_t instance);
 
+void uart_tx_polling(uint32_t base_address, uint8_t *const buffer,
+        uint32_t nbytes);
 uint16_t uart_write_fifo(uint32_t base_address, uint8_t *const buffer,
         uint32_t bytes);
 uint16_t uart_read_fifo(uint32_t base_address, uint8_t *const buffer,

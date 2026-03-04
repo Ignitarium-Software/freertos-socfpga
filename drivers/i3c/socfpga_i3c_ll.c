@@ -224,7 +224,7 @@ static int32_t read_xfer_response(uint8_t instance)
     /* If synchronous release the semaphore or else read the remaining bytes
      * and trigger the call back
      */
-    if (!(i3c_obj[instance].is_async))
+    if (i3c_obj[instance].is_async == false)
     {
         if (osal_semaphore_post(i3c_obj[(instance)].xfer_complete) == false)
         {
@@ -754,7 +754,7 @@ int32_t i3c_ll_send_xfer_command(uint8_t instance,
 
     /*Initiate the command transfer*/
     request_transfer(instance);
-    if (!is_async)
+    if (is_async == false)
     {
         /* wait for the command transfer to complete, signaled by the xfer semaphore*/
         ret = WAIT_FOR_XFER_COMPLETE(instance);

@@ -1,5 +1,6 @@
 
 add_library(freertos_kernel_port OBJECT)
+add_dependencies(freertos_kernel_port apply_smp_patch)
 target_sources(freertos_kernel_port
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/portmacro.h
@@ -13,6 +14,7 @@ target_sources(freertos_kernel_port
     ${FREERTOS_TOP_DIR}/drivers/console/socfpga_console.c
     ${FREERTOS_TOP_DIR}/drivers/uart/socfpga_uart.c
     ${FREERTOS_TOP_DIR}/drivers/uart/socfpga_uart_ll.c
+    ${FREERTOS_TOP_DIR}/drivers/sdm_mailbox/socfpga_sip_handler.c
     ${FREERTOS_TOP_DIR}/drivers/reset_mngr/socfpga_rst_mngr.c
     ${FREERTOS_TOP_DIR}/drivers/clk_mngr/socfpga_clk_mngr.c
 )
@@ -30,6 +32,7 @@ target_include_directories(freertos_kernel_port_headers
     ${FREERTOS_TOP_DIR}/drivers/console/
     ${FREERTOS_TOP_DIR}/drivers/common/
     ${FREERTOS_TOP_DIR}/drivers/uart/
+    ${FREERTOS_TOP_DIR}/drivers/sdm_mailbox/
     ${FREERTOS_TOP_DIR}/drivers/clk_mngr/
     ${FREERTOS_TOP_DIR}/drivers/sys_mngr/
     ${FREERTOS_TOP_DIR}/drivers/reset_mngr/

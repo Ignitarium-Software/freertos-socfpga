@@ -11,9 +11,11 @@
 #include "task.h"
 
 #include <socfpga_interrupt.h>
+#include "socfpga_sip_handler.h"
 
-#define SOCFPGA_CNTV_CTL_ENABLE         ( 1 << 0 )
-#define TMR_DELAY_SECS                  ( 1 )
+#define SOCFPGA_CNTV_CTL_ENABLE         ( ( 1U ) << 0 )
+#define TMR_DELAY_SECS                  ( 1U )
+#define PSCI_CPU_ON_FID                 ( 0xC4000003U )
 /*-----------------------------------------------------------*/
 
 static uint64_t ullCounterFreq = 0;
@@ -45,7 +47,7 @@ static void vPortSocfpgaSetVirtualTimerCompareValue( void )
 
 static uint32_t vPortSocfpgaTGetFrequency( void )
 {
-uint32_t uFreq;
+uint32_t uFreq = 0;
 
     asm volatile ( "MRS %0, CNTFRQ_EL0" : "=r" ( uFreq ) );
     return uFreq;
@@ -67,10 +69,10 @@ void vPortSocfpgaTimerIRQHandler( void *data )
 void vPortSocfpgaTimerInit( void )
 {
     /*Register the callback*/
-    interrupt_register_isr( EL1VIRT_TMR_INTR, vPortSocfpgaTimerIRQHandler, NULL );
+    configASSERT( interrupt_register_isr( EL1VIRT_TMR_INTR, vPortSocfpgaTimerIRQHandler, NULL ) == 0 );
 
     /* Configure interrupt. */
-    interrupt_enable( EL1VIRT_TMR_INTR, interrupt_min_interrupt_priority );
+    configASSERT( interrupt_enable( EL1VIRT_TMR_INTR, interrupt_min_interrupt_priority ) == 0 );
 
     /* Calculate the timer delay */
     ullCounterFreq = vPortSocfpgaTGetFrequency();

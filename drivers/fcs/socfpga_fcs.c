@@ -78,14 +78,14 @@ typedef struct
 {
     char uuid[FCS_UUID_SIZE];
     uint32_t session_id;
-    sdm_client_handle crypto_handle;
-} session_handle_struct;
+    sdm_client_handle_t crypto_handle;
+} fcs_session_handle_t;
 
 struct fcs_service_descriptor
 {
     osal_semaphore_t fcs_sem;
-    session_handle_struct session_map[FCS_MAX_INSTANCES];
-    sdm_client_handle security_handle;
+    fcs_session_handle_t session_map[FCS_MAX_INSTANCES];
+    sdm_client_handle_t security_handle;
     int session_count;
 };
 
@@ -186,10 +186,10 @@ int fcs_deinit(void)
     return 0;
 }
 
-static sdm_client_handle get_client_handle(char *uuid, uint32_t *session_id)
+static sdm_client_handle_t get_client_handle(char *uuid, uint32_t *session_id)
 {
     int i;
-    sdm_client_handle fcs_handle = NULL;
+    sdm_client_handle_t fcs_handle = NULL;
 
     if (fcs_descriptor->session_count == 0)
     {
@@ -211,7 +211,7 @@ static sdm_client_handle get_client_handle(char *uuid, uint32_t *session_id)
 }
 
 /* @brief Use the random number generator to generate a UUID for the session ID */
-static void generate_uuid(sdm_client_handle fcs_handle, uint32_t session_id,
+static void generate_uuid(sdm_client_handle_t fcs_handle, uint32_t session_id,
         char *uuid)
 {
     uint64_t rng_args[4], rng_resp[2] =
@@ -253,7 +253,7 @@ int run_fcs_open_service_session(char *uuid)
         0
     };
     uint32_t session_id;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
 
     if (fcs_descriptor->session_count >= (int)FCS_MAX_INSTANCES)
     {
@@ -337,7 +337,7 @@ int run_fcs_close_service_session(char *uuid)
     uint16_t status;
     uint64_t close_session_arg, resp_err = 0UL;
     uint32_t session_id = 0U;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
 
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
@@ -389,7 +389,7 @@ int run_fcs_close_service_session(char *uuid)
 int run_fcs_random_number_ext(char *rand_buf, char *uuid,
         uint32_t context_id, uint32_t rand_size)
 {
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t rng_args[4], rng_resp[2] =
     {
         0
@@ -449,7 +449,7 @@ int run_fcs_random_number_ext(char *rand_buf, char *uuid,
 int run_fcs_import_service_key(char *uuid, char *key,
         uint32_t key_size, char *status, unsigned int *status_size)
 {
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t import_key_args[2], import_key_resp[2] =
     {
         0
@@ -508,8 +508,8 @@ int run_fcs_import_service_key(char *uuid, char *key,
 int run_fcs_export_service_key(char *uuid, uint32_t key_id,
         char *key_dest, unsigned int *key_size)
 {
-    sdm_client_handle fcs_handle;
-    uint32_t session_id = 0U, *key_data;
+    sdm_client_handle_t fcs_handle;
+    uint32_t session_id = 0U;
     uint64_t export_key_args[4], export_key_resp[2] =
     {
         0
@@ -563,7 +563,7 @@ int run_fcs_export_service_key(char *uuid, uint32_t key_id,
 }
 int run_fcs_remove_service_key(char *uuid, uint32_t key_id)
 {
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t remove_key_args[2], remove_key_resp[2] =
     {
         0
@@ -602,7 +602,7 @@ int run_fcs_remove_service_key(char *uuid, uint32_t key_id)
 int run_fcs_get_service_key_info(char *uuid, uint32_t key_id,
         char *key_info, unsigned int *key_info_size)
 {
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t get_key_info_args[4], get_key_info_resp[2] =
     {
         0
@@ -655,7 +655,7 @@ int run_fcs_get_service_key_info(char *uuid, uint32_t key_id,
 int run_fcs_create_service_key(char *uuid, char *key,
         uint32_t key_size, char *status, unsigned int *status_size)
 {
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t create_key_args[2], create_key_resp[2] =
     {
         0
@@ -853,7 +853,7 @@ static int run_fcs_get_digest_init(char *uuid,
 {
     uint64_t fcs_digest_init_args[5];
     uint32_t session_id = 0U, param_data;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
 
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
@@ -905,8 +905,8 @@ static int run_fcs_get_digest_update(char *uuid, uint32_t context_id,
     {
         0
     };
-    uint32_t session_id = 0U, *fcs_digest_mbox_resp;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
+    uint32_t session_id = 0U;
 
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
@@ -981,7 +981,7 @@ int run_fcs_get_digest(char *uuid, uint32_t context_id,
 {
     int ret;
     uint32_t session_id = 0U, remaining_data = src_size, data_written;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
@@ -1046,7 +1046,7 @@ static int run_fcs_mac_verify_init(char *uuid, uint32_t context_id,
 {
     uint64_t fcs_mac_verify_init_args[5];
     uint32_t session_id = 0U;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
 
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
@@ -1075,12 +1075,12 @@ static int run_fcs_mac_verify_update(char *uuid, uint32_t context_id,
     (void)mac_data;
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_mac_verify_args[8], mac_verify_smc_resp[2] =
     {
         0
     };
-    uint32_t session_id = 0U, *mac_verify_mbox_resp;
+    uint32_t session_id = 0U;
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
@@ -1149,7 +1149,7 @@ int run_fcs_mac_verify(char *uuid, uint32_t context_id,
             mac_size;
     int ret;
     char *mac_data = NULL;
-    sdm_client_handle fcs_handle = get_client_handle(uuid, &session_id);
+    sdm_client_handle_t fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
         ERROR("Failed to locate client");
@@ -1233,7 +1233,7 @@ int run_fcs_sdos_encrypt(char *uuid, uint32_t context_id,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t sdos_encrypt_args[10], sdos_smc_resp[2] =
     {
         0
@@ -1303,7 +1303,7 @@ int run_fcs_sdos_decrypt(char *uuid, uint32_t context_id,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t sdos_decrypt_args[10], sdos_smc_resp[2] =
     {
         0
@@ -1373,7 +1373,7 @@ int run_fcs_hkdf_request(char *uuid, uint32_t key_id,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t hkdf_args[6], hkdf_resp[2] =
     {
         0
@@ -1762,7 +1762,7 @@ static int run_fcs_aes_crypt_init(char *uuid, uint32_t context_id,
     int ret;
     uint64_t fcs_aes_init_args[5];
     uint32_t session_id = 0U, param_size = 0;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
 
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
@@ -1800,7 +1800,7 @@ static int run_fcs_aes_update(char *uuid, uint32_t context_id,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_aes_update_args[9], fcs_aes_update_resp[2] =
     {
         0
@@ -1870,14 +1870,14 @@ int run_fcs_aes_cryption(char *uuid, uint32_t key_id,
         uint32_t context_id, uint32_t crypt_mode, uint32_t block_mode,
         uint32_t iv_src, char *iv_data, uint32_t tag_size,
         uint32_t aad_size, char *aad_data, char *tag_data, char *input_data,
-        uint32_t input_size, char *output_data, uint32_t output_size)
+        uint32_t input_size, char *output_data)
 {
     int ret;
     int finalized = 0;
     uint32_t session_id = 0U, data_rem, padding1,
             padding2, aes_input_size, aes_output_size, input_tag = 0U;
     char *aes_input_data, *aes_output_data, *temp = NULL;
-    sdm_client_handle fcs_handle = get_client_handle(uuid, &session_id);
+    sdm_client_handle_t fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
         ERROR("Failed to locate client");
@@ -2077,12 +2077,12 @@ int run_fcs_ecdsa_hash_sign(char *uuid, uint32_t context_id, uint32_t key_id,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_hash_sign_args[6], hash_sign_smc_resp[2] =
     {
         0
     };
-    uint32_t session_id = 0U, *hash_sign_mbox_resp;
+    uint32_t session_id = 0U;
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
@@ -2158,13 +2158,12 @@ int run_fcs_ecdsa_hash_verify(char *uuid, uint32_t context_id,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_hash_sign_verify_args[6], hash_sign_verify_smc_resp[2] =
     {
         0
     };
-    uint32_t session_id = 0U, *hash_sign_verify_mbox_resp, mbox_arg_size;
-    char *hash_sign_verify_mbox_args;
+    uint32_t session_id = 0U, mbox_arg_size;
 
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
@@ -2255,7 +2254,7 @@ static int run_fcs_ecdsa_sha2_data_sign_init(char *uuid,
         uint32_t context_id, uint32_t key_id, uint32_t ecc_algo)
 {
     int ret;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_ecdsa_sha2_init_args[5];
     uint32_t session_id = 0U;
     fcs_handle = get_client_handle(uuid, &session_id);
@@ -2291,12 +2290,12 @@ static int run_fcs_ecdsa_sha2_data_sign_update(char *uuid,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_sha2_sign_args[8], sha2_sign_smc_resp[2] =
     {
         0
     };
-    uint32_t session_id = 0U, *sha2_sign_mbox_resp;
+    uint32_t session_id = 0U;
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
@@ -2362,7 +2361,7 @@ int run_fcs_ecdsa_sha2_data_sign(char *uuid, uint32_t context_id,
 {
     uint32_t session_id = 0U, remaining_data = src_size, data_written;
     int ret;
-    sdm_client_handle fcs_handle = get_client_handle(uuid, &session_id);
+    sdm_client_handle_t fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
         ERROR("Failed to locate client");
@@ -2428,7 +2427,7 @@ int run_fcs_ecdsa_sha2_data_sign(char *uuid, uint32_t context_id,
 static int run_fcs_ecdsa_sha2_data_sign_verify_init(char *uuid,
         uint32_t context_id, uint32_t key_id, uint32_t ecc_algo)
 {
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_ecdsa_sha2_init_args[5];
     uint32_t session_id = 0U;
     fcs_handle = get_client_handle(uuid, &session_id);
@@ -2469,13 +2468,12 @@ static int run_fcs_ecdsa_sha2_data_sign_verify_update(char *uuid,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_sha2_sign_verify_args[8], sha2_sign_verify_smc_resp[2] =
     {
         0
     };
-    uint32_t session_id = 0U, *sha2_sign_verify_mbox_resp, payload_size;
-    char *sha2_sign_verify_mbox_args;
+    uint32_t session_id = 0U, payload_size;
 
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
@@ -2562,7 +2560,7 @@ int run_fcs_ecdsa_sha2_data_sign_verify(char *uuid,
     uint32_t session_id = 0U,
             remaining_data = src_size + sig_size + pub_key_size, data_written;
     int ret;
-    sdm_client_handle fcs_handle = get_client_handle(uuid, &session_id);
+    sdm_client_handle_t fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
         ERROR("Failed to locate client");
@@ -2647,12 +2645,12 @@ int run_fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_get_pubkey_args[6], get_pubkey_smc_resp[2] =
     {
         0
     };
-    uint32_t session_id = 0U, *get_pubkey_mbox_resp;
+    uint32_t session_id = 0U;
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
@@ -2724,12 +2722,12 @@ int run_fcs_ecdh_request(char *uuid, uint32_t key_id,
 {
     int ret;
     uint16_t status;
-    sdm_client_handle fcs_handle;
+    sdm_client_handle_t fcs_handle;
     uint64_t fcs_ecdh_args[6], ecdh_smc_resp[2] =
     {
         0
     };
-    uint32_t session_id = 0U, *ecdh_mbox_resp;
+    uint32_t session_id = 0U;
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {

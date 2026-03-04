@@ -562,7 +562,6 @@ int run_fcs_get_device_identity(char *dev_identity, uint32_t *dev_id_size);
  * @param[in]  input_data  Pointer to the input data to be encrypted or decrypted.
  * @param[in]  input_size  Length of the input data.
  * @param[out] output_data Pointer to the buffer where the output data will be stored.
- * @param[in]  output_size Length of the output buffer.
  *
  * @return
  * - 0: on success, or an error code on failure:
@@ -573,7 +572,7 @@ int run_fcs_aes_cryption(char *uuid, uint32_t key_id, uint32_t context_id,
         uint32_t crypt_mode, uint32_t block_mode, uint32_t iv_src,
         char *iv_data, uint32_t tag_size, uint32_t aad_size, char *aad_data,
         char *tag_data, char *input_data, uint32_t input_size,
-        char *output_data, uint32_t output_size);
+        char *output_data);
 
 /**
  * @brief Sign a hash using ECDSA with the FCS service.

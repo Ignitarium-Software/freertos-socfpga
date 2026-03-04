@@ -176,6 +176,13 @@ The following parameters can be specified during the CMake configuration stage:
   ```bash
   -DCMAKE_BUILD_TYPE=Debug
   ```
+- **SMP enable/disable**<br>
+  Enable or disable SMP mode of kernel. This port supports parallel execution of either 2xA55 or 2xA76 (Heterogeneous SMP on all cores not supported now).
+  ```bash
+  -DSMP=ON
+  ```
+  Default state is SMP off (-DSMP=OFF)<br>
+  ***configRUN_MULTIPLE_PRIORITIES*** : setting this config to 1 will cause tasks of same priorities to run simultaneously in separate cores
 
 - **A55 vs. A76 Boot**<br>
   By default, the build system compiles for **A55** as the boot core. To tune for A76 boot core version of the application, specify the option:
@@ -204,6 +211,27 @@ The following parameters can be specified during the CMake configuration stage:
   ```
 
 ### Build the desired application
+
+#### SMP configuration guidance
+
+These settings are present at `FreeRTOS/Demo/SOCFPGA/FreeRTOSConfig.h` and control SMP behavior once `-DSMP=ON` is enabled.
+
+- **configNUMBER_OF_CORES**
+  - Derived from `SMP` in this project: `1` when SMP is off, `2` when SMP is on.
+
+- **configUSE_CORE_AFFINITY**
+  - `1` enables task core affinity (pinning tasks to a specific core).
+  - Keep `1` when SMP is on; set `0` only if you want the scheduler to freely migrate tasks.
+
+- **configUSE_PASSIVE_IDLE_HOOK**
+  - `0` keeps the standard idle hook behavior.
+  - Set to `1` only if you need passive idle hook calls for the secondary idle tasks.
+
+Quick choices:
+```text
+Single core: SMP=OFF -> configNUMBER_OF_CORES=1, configUSE_CORE_AFFINITY=0
+Dual core:   SMP=ON  -> configNUMBER_OF_CORES=2, configUSE_CORE_AFFINITY=1
+```
 
 The following applications exist in the repository. Build the application of your choice.
 * Hello world application <br>

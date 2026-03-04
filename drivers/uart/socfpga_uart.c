@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -13,7 +13,7 @@
 #include "socfpga_interrupt.h"
 #include "osal.h"
 
-#define GET_INT_ID(instance)    (((instance) == 1U) ? UART1IRQ: UART0IRQ)
+#define GET_INT_ID(instance)    ((instance == 1U) ? (UART1IRQ) : (UART0IRQ))
 struct uart_descriptor
 {
     BaseType_t is_open;
@@ -50,9 +50,9 @@ static BaseType_t uart_is_handle_valid(uart_handle_t handle)
 {
     if ((handle == &uart_descriptors[0]) || (handle == &uart_descriptors[1]))
     {
-        return true;
+        return 1;
     }
-    return false;
+    return 0;
 }
 
 uart_handle_t uart_open(uint32_t instance)
@@ -94,6 +94,11 @@ uart_handle_t uart_open(uint32_t instance)
     handle->mutex = osal_mutex_create(&handle->mutex_mem);
     handle->rd_sem = osal_semaphore_create(&handle->rd_sem_mem);
     handle->wr_sem = osal_semaphore_create(&handle->wr_sem_mem);
+    if ((handle->mutex == NULL) || (handle->rd_sem == NULL) || (handle->wr_sem == NULL))
+    {
+        handle->is_open = 0;
+        return NULL;
+    }
     uart_init(instance);
     return handle;
 }
@@ -107,7 +112,7 @@ int32_t uart_ioctl(uart_handle_t const huart, uart_ioctl_t cmd, void *const buf)
     int32_t res = 0;
     uint16_t bytes_left;
 
-    if (!(uart_is_handle_valid(huart)))
+    if (uart_is_handle_valid(huart) == 0)
     {
         return -EINVAL;
     }
@@ -259,14 +264,14 @@ static int32_t uart_read(uart_handle_t huart, uint8_t *const buffer,
 int32_t uart_write_async(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes)
 {
-    if (!(uart_is_handle_valid(huart)) || (buf == NULL) || (nbytes == 0U))
+    if ((uart_is_handle_valid(huart) == 0) || (buf == NULL) || (nbytes == 0U))
     {
         return -EINVAL;
     }
 
     if (osal_mutex_lock(huart->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (!(huart->is_open))
+        if (huart->is_open == 0)
         {
             if (osal_mutex_unlock(huart->mutex) == false)
             {
@@ -304,14 +309,14 @@ int32_t uart_write_sync(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes)
 {
     BaseType_t tx_sem_return;
-    if (!(uart_is_handle_valid(huart)) || (buf == NULL) || (nbytes == 0U))
+    if ((uart_is_handle_valid(huart) == 0) || (buf == NULL) || (nbytes == 0U))
     {
         return -EINVAL;
     }
 
     if (osal_mutex_lock(huart->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (!(huart->is_open))
+        if (huart->is_open == 0)
         {
             if (osal_mutex_unlock(huart->mutex) == false)
             {
@@ -352,7 +357,7 @@ int32_t uart_write_sync(uart_handle_t const huart, uint8_t *const buf,
     return 0;
 }
 
-int32_t uart_read_async(uart_handle_t const huart, uint8_t *const buf,
+int32_t uart_write_polling(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes)
 {
     if (!(uart_is_handle_valid(huart)) || (buf == NULL) || (nbytes == 0U))
@@ -360,9 +365,30 @@ int32_t uart_read_async(uart_handle_t const huart, uint8_t *const buf,
         return -EINVAL;
     }
 
+    if (!(huart->is_open))
+    {
+        return -EINVAL;
+    }
+
+    huart->tx_is_busy = true;
+    huart->tx_is_async = false;
+    uart_tx_polling(huart->base_address, buf, nbytes);
+    huart->tx_is_busy = false;
+
+    return 0;
+}
+
+int32_t uart_read_async(uart_handle_t const huart, uint8_t *const buf,
+        uint32_t nbytes)
+{
+    if ((uart_is_handle_valid(huart) == 0) || (buf == NULL) || (nbytes == 0U))
+    {
+        return -EINVAL;
+    }
+
     if (osal_mutex_lock(huart->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (!(huart->is_open))
+        if (huart->is_open == 0)
         {
             if (osal_mutex_unlock(huart->mutex) == false)
             {
@@ -404,13 +430,13 @@ int32_t uart_read_sync(uart_handle_t const huart, uint8_t *const buf,
 {
     BaseType_t rx_sem_return;
 
-    if (!(uart_is_handle_valid(huart)) || (buf == NULL) || (nbytes == 0U))
+    if ((uart_is_handle_valid(huart) == 0) || (buf == NULL) || (nbytes == 0U))
     {
         return -EINVAL;
     }
     if (osal_mutex_lock(huart->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (!(huart->is_open))
+        if (huart->is_open == 0)
         {
             if (osal_mutex_unlock(huart->mutex) == false)
             {
@@ -460,7 +486,7 @@ int32_t uart_read_sync(uart_handle_t const huart, uint8_t *const buf,
 
 int32_t uart_cancel(uart_handle_t const huart)
 {
-    if (uart_is_handle_valid(huart) || (huart == NULL))
+    if ((huart == NULL) || (uart_is_handle_valid(huart) == 0))
     {
         return -EINVAL;
     }

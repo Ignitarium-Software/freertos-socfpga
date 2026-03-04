@@ -42,7 +42,7 @@
  * - Demonstrates the handling and reporting of ECC error events.
  */
 
-static xiossm_context *handle;
+static iossm_context_t *handle;
 
 void error_handler(void);
 void iossm_task(void)
@@ -135,7 +135,7 @@ void iossm_task(void)
     vTaskDelete(NULL);
 }
 
-void error_handler()
+void error_handler(void)
 {
     uint32_t ecc_status;
 

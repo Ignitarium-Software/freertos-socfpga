@@ -33,7 +33,6 @@ generate_bin_file(${PROJECT_NAME}.elf)
 add_sd_image(${PROJECT_NAME}.elf)
 add_qspi_image(${PROJECT_NAME}.elf)
 
-
 # link to the baremetal library
 target_link_libraries(${PROJECT_NAME}.elf
     PRIVATE freertos_socfpga
@@ -43,6 +42,12 @@ file(GLOB SAMPLE_SRCS ./*.c)
 # sources
 target_sources(${PROJECT_NAME}.elf
     PRIVATE main.c ${SAMPLE_SRCS}
+    ${freertos_SOURCE_DIR}/samples/common/socfpga_mmc.c
+)
+
+target_include_directories(${PROJECT_NAME}.elf
+    PRIVATE
+    ${freertos_SOURCE_DIR}/samples/common/
 )
 
 # specify linker script

@@ -42,7 +42,7 @@ wdt_handle_t wdt_open(uint32_t instance)
 {
     wdt_handle_t handle;
     uint32_t clk_hz;
-    if (!(instance < MAX_WATCHDOG_INSTANCES))
+    if (instance >= MAX_WATCHDOG_INSTANCES)
     {
         ERROR("Invalid watchdog instance");
         return NULL;
@@ -236,7 +236,7 @@ int32_t wdt_close(const wdt_handle_t hwdt)
         ERROR("Invalid watchdog handle");
         return -EINVAL;
     }
-    if (!hwdt->is_open)
+    if (hwdt->is_open == 0)
     {
         ERROR("Watchdog instance is not open");
         return -EINVAL;
@@ -259,6 +259,7 @@ int32_t wdt_close(const wdt_handle_t hwdt)
 void wdt_isr(void *handle)
 {
     wdt_handle_t hwdt = (wdt_handle_t)handle;
+
     if (hwdt->callback != NULL)
     {
         hwdt->callback(hwdt->cb_usercontext);

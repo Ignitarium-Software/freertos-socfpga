@@ -15,7 +15,6 @@
 #define AGX5_DIST_BASE_ADDR    (0x1D000000)
 #define AGX5_RD_BASE_ADDR      (0x1D060000)
 
-static uint32_t gic_redis_id;
 
 #define SOCFPGA_DEFAULT_INTERRUPT_SPIN
 
@@ -47,6 +46,25 @@ void gic_default_interrupt_handler(void *data) {
 #endif
 }
 
+void interrupt_enable_core_rdis(void)
+{
+    /* Get the ID of the Redistributor connected to this PE. */
+    uint32_t gic_redis_id = (uint32_t)gic_get_redist_id(
+            (uint32_t)gic_reg_get_cpu_affinity());
+
+    /* Mark this core as being active. */
+    if (gic_wakeup_redist(gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
+    {
+        return;
+    }
+
+    /* Set the interrupt mask. */
+    gic_reg_set_priority_mask(0xFF);
+
+    /* Enable group 1 interrupts (group 0 are secure interrupts). */
+    gic_reg_enable_group1_interrupts();
+}
+
 /**
  * @brief    Initializes the GIC600 interrupt controller.
  */
@@ -58,41 +76,23 @@ void interrupt_init_gic(void)
         return;
     }
 
-    /* Get the ID of the Redistributor connected to this PE. */
-    gic_redis_id = (uint32_t)gic_get_redist_id(
-            (uint32_t)gic_reg_get_cpu_affinity());
-
-    /* Mark this core as being active. */
-    if (gic_wakeup_redist(gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
-    {
-        return;
-    }
-
-    /* Set the interrupt mask. */
-    gic_reg_write_group1_end_of_interrupt(0xFF);
-
-    /* Enable group 1 interrupts (group 0 are secure interrupts). */
-    gic_reg_enable_group1_interrupts();
+    /* Enable the redistributor of the current core */
+    interrupt_enable_core_rdis();
 }
 
 socfpga_interrupt_err_t interrupt_ppi_enable(socfpga_hpu_interrupt_t id,
         socfpga_hpu_interrupt_type_t interrupt_type,
         uint8_t priority, uint32_t gic_redis_id) {
     uint32_t type = GICV3_CONFIG_LEVEL;
-    if ((id > PPI_MAX) || (id < PPI_START))
+    if ((id > PPI_MAX))
     {
         return ERR_PPI_ID;
     }
-
     if (interrupt_type == SPI_INTERRUPT_TYPE_EDGE)
     {
         type = GICV3_CONFIG_EDGE;
     }
 
-    if (gic_enable_int((uint32_t)id, gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
-    {
-        return ERR_PPI_ID;
-    }
     if (gic_set_int_group((uint32_t)id, gic_redis_id,
             GICV3_GROUP1_NON_SECURE) != INTERRUPT_RETURN_SUCCESS)
     {
@@ -103,6 +103,10 @@ socfpga_interrupt_err_t interrupt_ppi_enable(socfpga_hpu_interrupt_t id,
         return ERR_PPI_ID;
     }
     if (gic_set_int_priority((uint32_t)id, gic_redis_id, priority) != INTERRUPT_RETURN_SUCCESS)
+    {
+        return ERR_PPI_ID;
+    }
+    if (gic_enable_int((uint32_t)id, gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
     {
         return ERR_PPI_ID;
     }
@@ -176,7 +180,10 @@ socfpga_interrupt_err_t interrupt_enable(socfpga_hpu_interrupt_t id, uint8_t pri
 }
 
 socfpga_interrupt_err_t interrupt_spi_disable(socfpga_hpu_interrupt_t id) {
-    if (gic_disable_int((uint32_t)id, 0) != INTERRUPT_RETURN_SUCCESS)
+
+    uint32_t gic_redis_id = (uint32_t)gic_get_redist_id(
+                (uint32_t)gic_reg_get_cpu_affinity());
+    if (gic_disable_int((uint32_t)id, gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
     {
         return ERR_SPI_ID;
     }
@@ -208,26 +215,11 @@ socfpga_interrupt_err_t interrupt_register_isr(socfpga_hpu_interrupt_t id,
 void interrupt_irq_handler(unsigned int interrupt_id)
 {
     /* Clear pending interrupts. */
-    gic_redis_id = (uint32_t)gic_get_redist_id(
-            (uint32_t)gic_reg_get_cpu_affinity());
-    if (gic_clear_int_pending(interrupt_id, gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
-    {
-        return;
-    }
-
     /*This is the Max ID for PPI and SPI*/
     if (interrupt_id < MAX_SPI_HPU_INTERRUPT)
     {
         interrupt_callbacks[interrupt_id].callback(interrupt_callbacks[
                     interrupt_id].data);
-    }
-    else if (interrupt_id == 1023U)
-    {
-        INFO("FIQ: Interrupt was spurious");
-        while (1 == 1)
-        {
-
-        }
     }
     else
     {
@@ -238,4 +230,3 @@ void interrupt_irq_handler(unsigned int interrupt_id)
 
     return;
 }
-

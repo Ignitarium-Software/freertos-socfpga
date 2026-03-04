@@ -156,7 +156,7 @@ int mair_idx;
 }
 /*-----------------------------------------------------------*/
 
-void _mmu_configure( void )
+void _mmu_configure( uint64_t setup )
 {
 uint64_t mair;
 uint64_t tcr_el1;
@@ -164,10 +164,12 @@ uint64_t sctlr_el1;
 uint64_t cpacr_el1;
 uint64_t ttbr0_el1 = ( uint64_t ) l0_pagetable;
 
-    prepare_l0_pages();
-    prepare_l1_pages();
-    prepare_l2_pages( 2 ); /* Use L2 pagetable for region 0x80000000-0xBFFFFFFF */
-
+    if( setup != 0 )
+    {
+        prepare_l0_pages();
+        prepare_l1_pages();
+        prepare_l2_pages( 2 ); /* Use L2 pagetable for region 0x80000000-0xBFFFFFFF */
+    }
     /* Setup MAIR attributes
        Index 0: Device memory nGnRnE
        Index 1: Normal memory (cache enabled)
@@ -205,8 +207,11 @@ uint64_t ttbr0_el1 = ( uint64_t ) l0_pagetable;
     WRITE_SYS_REG( CPACR_EL1, cpacr_el1 );
 
     asm volatile ( "ISB" );
-    invalidate_cache( l0_pagetable, sizeof( l0_pagetable ) );
-    invalidate_cache( l1_pagetable, sizeof( l1_pagetable ) );
-    invalidate_cache( l2_pagetable, sizeof( l2_pagetable ) );
+    if( setup != 0 )
+    {
+        invalidate_cache( l0_pagetable, sizeof( l0_pagetable ) );
+        invalidate_cache( l1_pagetable, sizeof( l1_pagetable ) );
+        invalidate_cache( l2_pagetable, sizeof( l2_pagetable ) );
+    }
 }
 /*-----------------------------------------------------------*/

@@ -86,9 +86,9 @@
 #define SIP_SMC_GET_TRANS_ID       0x420000C9U
 #define SIP_GENERIC_MAILBOX_CMD    0x420000EEU
 #define FORMAT_TRANS_ID(cid, jid) \
-    ((((uint64_t)(cid) & 0xFU) << 4) | (((uint64_t)(jid) & 0xFU)))
-#define GET_CLIENT_ID(trans_id)    ((trans_id) & 0xF0U) >> 4
-#define GET_JOB_ID(trans_id)       ((trans_id) & 0xFU)
+    ((((uint64_t)(cid) & 0xFU) << 4U) | ((uint64_t)(jid) & 0xFU))
+#define GET_CLIENT_ID(trans_id)    ((trans_id & 0xF0U) >> 4U)
+#define GET_JOB_ID(trans_id)       (trans_id & 0xFU)
 #define ATF_CLIENT_ID       1U
 #define MBOX_TASK_CLOSED    0U
 #define MBOX_TASK_OPEN      1U
@@ -98,7 +98,7 @@ typedef struct
 {
     uint64_t *resp_data;
     uint64_t resp_len;
-} job_id_resp_map;
+} job_id_resp_map_t;
 struct sdm_client_descriptor
 {
     uint16_t job_pool;
@@ -107,7 +107,7 @@ struct sdm_client_descriptor
     mbox_call_back_t call_back;
     osal_mutex_t client_mutex;
     osal_semaphore_t client_free;
-    job_id_resp_map job_resp[MAX_JOB_ID];
+    job_id_resp_map_t job_resp[MAX_JOB_ID];
 };
 static struct sdm_mbox_descriptor
 {
@@ -121,7 +121,7 @@ void mbox_poll_resp_task(void *param);
 
 void mbox_irq_handler(void *param);
 
-static uint8_t assign_job_id(sdm_client_handle mbox_handle)
+static uint8_t assign_job_id(sdm_client_handle_t mbox_handle)
 {
     uint8_t i = 0;
     if ((mbox_handle == NULL) || (mbox_handle->job_pool == (JOB_POOL_FULL)))
@@ -152,8 +152,8 @@ static uint8_t assign_job_id(sdm_client_handle mbox_handle)
 
 static int8_t free_job_id(uint8_t client_id, uint8_t job_id)
 {
-    sdm_client_handle mbox_handle = &client_descriptors[client_id];
-    if ((mbox_handle == NULL) || (mbox_handle->job_pool == 0U))
+    sdm_client_handle_t mbox_handle = &client_descriptors[client_id];
+    if (mbox_handle->job_pool == 0U)
     {
         return -EIO;
     }
@@ -174,7 +174,7 @@ void mbox_poll_resp_task(void *param)
 {
     (void)param;
 
-    sdm_client_handle mbox_handle;
+    sdm_client_handle_t mbox_handle;
     uint64_t bitmask[4], smc_args[12];
     uint8_t trans_id, i, j;
     uint8_t client_id, job_id;
@@ -282,10 +282,10 @@ void mbox_poll_resp_task(void *param)
     osal_task_delete();
 }
 
-sdm_client_handle mbox_open_client(void)
+sdm_client_handle_t mbox_open_client(void)
 {
     uint8_t i;
-    sdm_client_handle ret_val = NULL;
+    sdm_client_handle_t ret_val = NULL;
     if (osal_mutex_lock(mbox_descriptor->client_list_mutex,
             OSAL_TIMEOUT_WAIT_FOREVER) == pdTRUE)
     {
@@ -317,7 +317,7 @@ sdm_client_handle mbox_open_client(void)
     return ret_val;
 }
 
-int32_t mbox_close_client(sdm_client_handle mbox_handle)
+int32_t mbox_close_client(sdm_client_handle_t mbox_handle)
 {
     if ((mbox_handle == NULL) || (mbox_handle->client_status == 0U))
     {
@@ -364,7 +364,7 @@ int32_t mbox_close_client(sdm_client_handle mbox_handle)
     return 0;
 }
 
-int32_t mbox_send_command(sdm_client_handle mbox_handle, uint32_t command,
+int32_t mbox_send_command(sdm_client_handle_t mbox_handle, uint32_t command,
         uint32_t *command_args, uint32_t arg_size,
         uint32_t *resp, uint32_t resp_size,
         uint64_t *smc_resp, uint32_t smc_resp_len)
@@ -399,7 +399,7 @@ int32_t mbox_send_command(sdm_client_handle mbox_handle, uint32_t command,
     return sip_svc_send(mbox_handle, SIP_GENERIC_MAILBOX_CMD, mbox_smc_args,
             sizeof(mbox_smc_args), smc_resp, smc_resp_len);
 }
-int32_t sip_svc_send(sdm_client_handle mbox_handle, uint64_t smc_func_id,
+int32_t sip_svc_send(sdm_client_handle_t mbox_handle, uint64_t smc_func_id,
         uint64_t *mbox_args, uint32_t arg_len, uint64_t *resp_data,
         uint32_t resp_len)
 {
@@ -493,7 +493,7 @@ int32_t sip_svc_send(sdm_client_handle mbox_handle, uint64_t smc_func_id,
     return ret;
 }
 
-int32_t mbox_set_callback(sdm_client_handle mbox_handle,
+int32_t mbox_set_callback(sdm_client_handle_t mbox_handle,
         mbox_call_back_t callback)
 {
     if (mbox_handle == NULL)

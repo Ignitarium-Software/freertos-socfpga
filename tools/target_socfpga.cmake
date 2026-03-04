@@ -34,11 +34,13 @@ set(LIBRARY_OUTPUT_PATH  ${CMAKE_BINARY_DIR}/lib)
 set(DEFAULT_C_FLAGS_SECURITY -D_FORTIFY_SOURCE=2  CACHE STRING "Security build flags." FORCE)
 set(DEFAULT_C_FLAGS_SECURITY_STRONG ${DEFAULT_C_FLAGS_SECURITY} -z noexecstack -fvisibility=hidden CACHE STRING "Strong Security build flags." FORCE)
 set(DEFAULT_C_FLAGS_CLEAN_CODE -ffunction-sections -fdata-sections -fno-zero-initialized-in-bss -mstrict-align CACHE STRING "Code cleanliness build flags." FORCE)
-set(DEFAULT_C_FLAGS_WARNINGS -Werror -Wall -Wextra -Wformat -Wformat-security -Wno-sign-compare -Wno-unused-parameter -Wno-maybe-uninitialized -Wno-int-to-pointer-cast -Wno-stringop-truncation -Wno-array-bounds CACHE STRING "Warning build flags." FORCE)
+set(DEFAULT_C_FLAGS_WARNINGS -Werror -Wall -Wextra -Wformat-security -Wformat -Wno-sign-compare -Wno-maybe-uninitialized -Wno-int-to-pointer-cast -Wno-stringop-truncation -Wno-array-bounds CACHE STRING "Warning build flags." FORCE)
 if(CORE STREQUAL "A76")
-    set(DEFAULT_C_FLAGS_PROCESSOR_TUNE -march=armv8-a -mtune=cortex-a76 CACHE STRING "processor tuning build flags" FORCE)
+    set(DEFAULT_C_FLAGS_PROCESSOR_TUNE -march=armv8-a+crc -mtune=cortex-a76 CACHE STRING "processor tuning build flags" FORCE)
+    add_compile_definitions(configBOOT_CORE=2)
 else()
-    set(DEFAULT_C_FLAGS_PROCESSOR_TUNE -march=armv8-a -mtune=cortex-a55 CACHE STRING "processor tuning build flags" FORCE)
+    set(DEFAULT_C_FLAGS_PROCESSOR_TUNE -march=armv8-a+crc -mtune=cortex-a55 CACHE STRING "processor tuning build flags" FORCE)
+    add_compile_definitions(configBOOT_CORE=0)
 endif()
 
 set(DEFAULT_C_FLAGS_DEBUG -O0 -g3 -DGUEST ${DEFAULT_C_FLAGS_SECURITY} ${DEFAULT_C_FLAGS_WARNINGS} ${DEFAULT_C_FLAGS_CLEAN_CODE} ${DEFAULT_C_FLAGS_PROCESSOR_TUNE} )
@@ -67,6 +69,16 @@ message(STATUS "${BoldWhite}Host System     :  ${CMAKE_SYSTEM_NAME}${ColourReset
 message(STATUS "${BoldWhite}C COMPILER      :  ${CMAKE_C_COMPILER}${ColourReset}")
 
 add_link_options(
+    -Wl,--wrap=__retarget_lock_init
+    -Wl,--wrap=__retarget_lock_init_recursive
+    -Wl,--wrap=__retarget_lock_close
+    -Wl,--wrap=__retarget_lock_close_recursive
+    -Wl,--wrap=__retarget_lock_acquire
+    -Wl,--wrap=__retarget_lock_acquire_recursive
+    -Wl,--wrap=__retarget_lock_try_acquire
+    -Wl,--wrap=__retarget_lock_try_acquire_recursive
+    -Wl,--wrap=__retarget_lock_release
+    -Wl,--wrap=__retarget_lock_release_recursive
     -Wl,-gc-sections
     -Wl,--print-memory-usage
     -Wl,-Map=${PROJECT_BINARY_DIR}/${PROJECT_NAME}.map

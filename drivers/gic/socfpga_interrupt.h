@@ -61,6 +61,8 @@
  * @ingroup intr_enums
  */
 typedef enum {
+    /* System SGI */
+    YIELD_CORE_INTR,
     /*System PPIs*/
     PPI_START = 22, /*!<Start of Private Peripheral Interface (PPI) interrupts*/
     EL1VIRT_TMR_INTR = 27, /*!< EL1 Phy Timer Interrupt */
@@ -375,6 +377,11 @@ typedef enum {
  * @brief Initializes the GIC interrupt controller.
  */
 void interrupt_init_gic(void);
+
+/**
+ * @brief Initializes the GIC redistributor of the core
+ */
+void interrupt_enable_core_rdis(void);
 
 /**
  * @brief Default interrupt handler for GIC.

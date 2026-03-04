@@ -18,7 +18,7 @@
 #define MULTI_BLK_LLI_MODE_ENABLED    1
 #define DMA_MAX_INSTANCE              (2U)
 #define MAX_CHANNEL_NUM               (4U)
-#define MAX_LLI_PER_CHANNEL           10U
+#define MAX_LLI_PER_CHANNEL           128U
 #define CH_SUSPEND_TIMEOUT_COUNT      (1000U)
 /* Max block size available is 32767 */
 #define MAX_BLOCK_SIZE    0x7FFFU

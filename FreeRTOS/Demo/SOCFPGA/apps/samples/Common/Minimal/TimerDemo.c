@@ -866,14 +866,22 @@ void vTimerPeriodicISRTests( void )
             /* Windows is not real real time. */
             const TickType_t xMargin = 20;
         #else
-            const TickType_t xMargin = 6;
+            #if ( configNUMBER_OF_CORES > 1 )
+                const TickType_t xMargin = 12;
+            #else
+                const TickType_t xMargin = 6;
+            #endif
         #endif /* _WINDOWS_ */
     #else
         #ifdef _WINDOWS_
             /* Windows is not real real time. */
             const TickType_t xMargin = 20;
         #else
-            const TickType_t xMargin = 4;
+            #if ( configNUMBER_OF_CORES > 1 )
+                const TickType_t xMargin = 8;
+            #else
+                const TickType_t xMargin = 4;
+            #endif
         #endif /* _WINDOWS_ */
     #endif /* if ( configTIMER_TASK_PRIORITY != ( configMAX_PRIORITIES - 1 ) ) */
 

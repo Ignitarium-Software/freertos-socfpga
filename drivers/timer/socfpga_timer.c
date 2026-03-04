@@ -227,7 +227,7 @@ int32_t timer_start(timer_handle_t const htimer)
         return -EINVAL;
     }
 
-    if (!(htimer->is_configured))
+    if (htimer->is_configured == 0)
     {
         ERROR("Timer needs to be configured before starting");
         return -EINVAL;
@@ -258,7 +258,7 @@ int32_t timer_stop(timer_handle_t const htimer)
         ERROR("Timer Handle cannot be NULL");
         return -EINVAL;
     }
-    if (!htimer->is_running)
+    if (htimer->is_running == 0)
     {
         ERROR("Timer instance not running");
         return -EPERM;
@@ -319,12 +319,12 @@ int32_t timer_close(timer_handle_t const htimer)
 
 int32_t timer_get_value_raw(timer_handle_t const htimer, uint32_t *counter_val)
 {
-    if ((htimer == NULL))
+    if ((htimer == NULL) || (counter_val == NULL))
     {
         ERROR("Timer Handle cannot be NULL");
         return -EINVAL;
     }
-    if (!htimer->is_running)
+    if (htimer->is_running == 0)
     {
         ERROR("Timer instance not running");
         return -EPERM;
@@ -341,7 +341,7 @@ int32_t timer_get_value_us(timer_handle_t const htimer, uint32_t *time_us)
         ERROR("Timer Handle cannot be NULL");
         return -EINVAL;
     }
-    if (!htimer->is_running)
+    if (htimer->is_running == 0)
     {
         ERROR("Timer instance not running");
         return -EPERM;
@@ -368,7 +368,6 @@ int32_t timer_set_callback(timer_handle_t const htimer,
         ERROR("Timer handle cannot be NULL");
         return -EINVAL;
     }
-    (void)param;
     /* Assign user callback to context variable */
     htimer->callback_func = callback;
     htimer->param = param;

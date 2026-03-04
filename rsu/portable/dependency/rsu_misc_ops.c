@@ -19,7 +19,7 @@
 #include "RSU_OSAL_types.h"
 
 #define FIELD_EXTRACT(reg, start, end) \
-    (((reg) >> (start)) & ((1U << ((end) - (start) + 1)) - 1))
+    ((reg >> start) & ((1U << (end - start + 1U)) - 1U))
 
 #define RSU_VERSION_DCMF_IDX(val)    FIELD_EXTRACT(val, 28, 31)
 #define RSU_GET_STATUS_RESP    36U
@@ -34,7 +34,7 @@
 char buf_a[DCMF_SIZE] = {0};
 char buf_b[DCMF_SIZE] = {0};
 
-extern sdm_client_handle rsu_client;
+extern sdm_client_handle_t rsu_client;
 extern flash_handle_t rsu_rtos_qspi_handle;
 extern osal_semaphore_t rsu_sem;
 
@@ -225,4 +225,3 @@ RSU_OSAL_INT plat_rsu_misc_init(struct rsu_ll_misc *misc_intf,
 
     return 0;
 }
-

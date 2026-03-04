@@ -27,8 +27,8 @@
  */
 extern void config_page_caching( void * addr,
                                  int mode );
-extern size_t get_smallest_ever_remaining_heap_size();
-extern size_t get_remaining_heap_size();
+extern size_t get_smallest_ever_remaining_heap_size( void );
+extern size_t get_remaining_heap_size( void );
 
 static uintptr_t _coherent_bytes_left = 0;
 static uintptr_t _coherent_pointer = 0;
@@ -45,7 +45,7 @@ size_t xPortGetMinimumEverFreeHeapSize( void )
 }
 /*-----------------------------------------------------------*/
 
-#define GRANULE_SIZE    0x200000
+#define GRANULE_SIZE    ( 0x200000U )
 
 void * pvPortMallocCoherent( size_t xWantedSize )
 {

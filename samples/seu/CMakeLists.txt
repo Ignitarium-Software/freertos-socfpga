@@ -45,6 +45,12 @@ file(GLOB SAMPLE_SRCS ./*.c)
 # sources
 target_sources(${PROJECT_NAME}.elf
     PRIVATE main.c ${SAMPLE_SRCS}
+    ${freertos_SOURCE_DIR}/samples/common/socfpga_mmc.c
+)
+
+target_include_directories(${PROJECT_NAME}.elf
+    PRIVATE
+    ${freertos_SOURCE_DIR}/samples/common/
 )
 
 # specify linker script

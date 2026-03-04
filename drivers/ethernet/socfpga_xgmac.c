@@ -1,6 +1,7 @@
 /*
  * FreeRTOS+TCP V3.1.0
  * Copyright (C) 2022 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
  *
  * SPDX-License-Identifier: MIT
  *
@@ -23,10 +24,6 @@
  *
  * http://aws.amazon.com/freertos
  * http://www.FreeRTOS.org
- */
-
-/*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
  *
  * HAL driver implementation for XGMAC. Modified for SoC FPGA
  */
@@ -136,10 +133,7 @@ void dma_setup_tx_descriptor_list(xgmac_handle_t hxgmac);
 void dma_setup_rx_descriptor_list(xgmac_handle_t hxgmac);
 static Basetype_t dma_enable_interrupts(xgmac_handle_t hxgmac, const
         xgmac_dev_config_str_t *xgmac_dev_config);
-static Basetype_t dma_disable_interrupts(xgmac_handle_t hxgmac, const
-        xgmac_dev_config_str_t *xgmac_dev_config);
 static Basetype_t dma_register_isr(xgmac_handle_t hxgmac);
-static Basetype_t dma_un_register_isr(xgmac_handle_t hxgmac);
 void socfpga_xgmac_dma_isr(void *param);
 
 static socfpga_hpu_interrupt_t get_emac_intr_id(int32_t instance)

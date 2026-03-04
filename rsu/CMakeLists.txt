@@ -8,6 +8,7 @@ target_compile_options(uniLibRSU PRIVATE
   -march=armv8-a+crc
   -Wno-format
   -Wno-format-security
+  -Wno-error=format-security
 )
 
 add_subdirectory(portable)

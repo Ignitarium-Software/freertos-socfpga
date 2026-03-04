@@ -47,6 +47,12 @@ target_sources(${PROJECT_NAME}.elf
     ${SAMPLE_SRCS}
     ${freertos_SOURCE_DIR}/tinyusb/apps/usb_main.c
     ${freertos_SOURCE_DIR}/tinyusb/apps/msc_app.c
+    ${freertos_SOURCE_DIR}/samples/common/socfpga_mmc.c
+)
+
+target_include_directories(${PROJECT_NAME}.elf
+    PRIVATE
+	${freertos_SOURCE_DIR}/samples/common/
 )
 
 # specify linker script

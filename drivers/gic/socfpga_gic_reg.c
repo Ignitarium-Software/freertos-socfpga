@@ -24,11 +24,6 @@ void gic_reg_enable_group1_interrupts(void)
     GIC_REG_WRITE(ICC_IGRPEN1_EL1, (uint64_t)1);
 }
 
-void gic_reg_write_group1_end_of_interrupt(uint32_t interrupt_id)
-{
-    GIC_REG_WRITE(ICC_EOIR1_EL1, (uint64_t)interrupt_id);
-}
-
 void gic_reg_set_priority_mask(uint32_t interrupt_id)
 {
     GIC_REG_WRITE(ICC_PMR_EL1, (uint64_t)interrupt_id);

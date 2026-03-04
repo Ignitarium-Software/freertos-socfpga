@@ -16,6 +16,12 @@ add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/portable)
 
 #Build FreeRTOS-Kernel
 add_library(freertos_config INTERFACE)
+
+if(SMP)
+    target_compile_definitions(freertos_config INTERFACE SMP=1)
+else()
+    target_compile_definitions(freertos_config INTERFACE SMP=0)
+endif()
 target_include_directories(freertos_config
     SYSTEM
     INTERFACE

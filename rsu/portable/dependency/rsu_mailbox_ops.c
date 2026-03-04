@@ -24,7 +24,7 @@
 #define RSU_GET_STATUS_RESP      36U
 #define RSU_UPDATE_ARG_SIZE      8U
 #define RSU_NOTIFY_ARG_SIZE      4U
-sdm_client_handle rsu_client = NULL;
+sdm_client_handle_t rsu_client = NULL;
 osal_semaphore_t rsu_sem;
 
 void rsu_callback(uint64_t *resp_data)

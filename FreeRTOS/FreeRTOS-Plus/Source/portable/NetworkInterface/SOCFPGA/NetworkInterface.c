@@ -229,7 +229,6 @@ BaseType_t prvPhyCheckLinkStatus( TickType_t xMaxTimeTicks,
 
 /* A copy of PHY register 1: 'COPPER_STATUS_REG' */
 static BaseType_t xPHYLinkStatus = pdFALSE;
-static uint32_t PhyLinkSpeed;
 /*-----------------------------------------------------------*/
 
 /* The function xNetworkInterfaceInitialise() will be called as
@@ -851,8 +850,6 @@ static void prvHandleErrorEvents( uint8_t ucErrStatus,
                                   NetworkInterface_t * pxInterface )
 {
 BaseType_t ucRemainInErrState = pdFALSE;
-int instance = ( int ) ( ( uintptr_t ) pxInterface->pvArgument );
-xgmac_handle_t pXGMACHandle = ( xgmac_handle_t ) xEmacConfig[ instance ].hxgmac;
 xgmac_err_t xErrType = ( xgmac_err_t ) ucErrStatus;
 BaseType_t xStatus = xReadPhyStatus( pxInterface );
 
@@ -1274,7 +1271,6 @@ NetworkInterface_t * pxInterface = ( NetworkInterface_t * ) pvParameters;
 TimeOut_t xPhyTime;
 int instance = ( int ) ( ( uintptr_t ) pxInterface->pvArgument );
 TickType_t xPhyRemTime;
-BaseType_t xResult;
 uint64_t xStatus;
 const TickType_t ulMaxBlockTime = pdMS_TO_TICKS( 100UL );
 uint32_t ulISREvents = 0U;
@@ -1287,8 +1283,6 @@ xgmac_handle_t pXGMACHandle = ( xgmac_handle_t ) xEmacConfig[ instance ].hxgmac;
 
     for( ; ; )
     {
-        xResult = 0;
-
         #ifdef ENABLE_PRINTF
         #if ( ipconfigHAS_PRINTF != 0 )
             {
@@ -1347,7 +1341,7 @@ xgmac_handle_t pXGMACHandle = ( xgmac_handle_t ) xEmacConfig[ instance ].hxgmac;
                 if( xPHYLinkStatus != xStatus )
                 {
                     xPHYLinkStatus = xStatus;
-                    FreeRTOS_printf( ( "prvEMACHandlerTask: PHY LS now %lu\n",
+                    FreeRTOS_printf( ( "prvEMACHandlerTask: PHY LS now %d\n",
                                         xPHYLinkStatus != 0uL ) );
                 }
             }

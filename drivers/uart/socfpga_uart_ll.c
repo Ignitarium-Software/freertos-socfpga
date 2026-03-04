@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -311,7 +311,7 @@ uint32_t get_int_status(uint32_t base_address)
 /**
  * @brief Write data to UART transmit FIFO
  */
-uint16_t uart_write_fifo(uint32_t base_address, uint8_t *const buffer,
+uint16_t uart_write_fifo(uint32_t base_address, uint8_t *const buf,
         uint32_t bytes)
 {
     uint16_t bytes_done = 0U;
@@ -321,7 +321,7 @@ uint16_t uart_write_fifo(uint32_t base_address, uint8_t *const buffer,
         if (((RD_REG32(base_address + UART_USR) >> UART_USR_TFNF_POS) & 1U) ==
                 1U)
         {
-            WR_REG32((base_address + UART_THR), buffer[bytes_done]);
+            WR_REG32((base_address + UART_THR), buf[bytes_done]);
             bytes_done++;
             bytes--;
         }
@@ -337,7 +337,7 @@ uint16_t uart_write_fifo(uint32_t base_address, uint8_t *const buffer,
 /**
  * @brief Read data from UART receive FIFO
  */
-uint16_t uart_read_fifo(uint32_t base_address, uint8_t *const buffer,
+uint16_t uart_read_fifo(uint32_t base_address, uint8_t *const buf,
         uint32_t bytes)
 {
 
@@ -349,7 +349,7 @@ uint16_t uart_read_fifo(uint32_t base_address, uint8_t *const buffer,
         if (((RD_REG32(base_address + UART_USR) >> UART_USR_RFNE_POS) & 1U) ==
                 1U)
         {
-            buffer[bytes_done] = (uint8_t)RD_REG32(base_address + UART_RBR);
+            buf[bytes_done] = (uint8_t)RD_REG32(base_address + UART_RBR);
             bytes--;
             bytes_done++;
         }
@@ -422,5 +422,18 @@ void uart_disable_interrupt(uint32_t base_address, uart_interrupt_id_t id)
         default:
             /*do nothing*/
             break;
+    }
+}
+
+/**
+ * @brief Polling write to UART Tx
+ */
+void uart_tx_polling(uint32_t base_address, uint8_t *const buf,
+        uint32_t nbytes)
+{
+    for(uint32_t len = 0; len < nbytes; len++)
+    {
+        while (!(RD_REG32(base_address + UART_LSR) & UART_LSR_THRE_MASK));
+        WR_REG32(base_address + UART_THR, buf[len]);
     }
 }

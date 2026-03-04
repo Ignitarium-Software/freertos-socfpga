@@ -10,7 +10,7 @@
 #include "osal_log.h"
 #include "osal.h"
 #include "socfpga_gic_registers.h"
-
+#include "socfpga_interrupt.h"
 #include "socfpga_gic.h"
 
 #define INTERRUPT_DCTRL_ENG0      (1U << 0U)
@@ -89,7 +89,7 @@ int32_t gic_get_redist_id(uint32_t affinity)
         index++;
     } while ((uint32_t)index <= gic_max_rd);
 
-    return INTERRUPT_RETURN_SUCCESS; /* return -1 to signal not RD found */
+    return INTERRUPT_RETURN_ERROR; /* return -1 to signal not RD found */
 }
 
 /*
@@ -137,7 +137,7 @@ static uint32_t gic_is_valid_ext_spi(uint32_t id)
         max_spi = (max_spi + 1U) * 32U;          /* Convert into number of ESPIs */
         max_spi = max_spi + 4096U;               /* Range starts at 4096 */
 
-        if (!(id < max_spi))
+        if (id >= max_spi)
         {
 #ifdef DEBUG
             /* put debug print here */
@@ -198,6 +198,7 @@ int32_t gic_set_int_priority(uint32_t id, uint32_t rd, uint8_t priority)
         uint32_t priority_temp = gic_dist->GICD_IPRIORITYR[index];
         GIC_SET_PRIORITY(priority_temp, INTERRUPT_MAKE_PRIORITY(priority), offset);
         gic_dist->GICD_IPRIORITYR[index] = priority_temp;
+
     }
     else if ((id > 1055U) && (id < 1120U))
     {
@@ -352,11 +353,11 @@ int32_t gic_set_int_route(uint32_t id, uint32_t mode, uint32_t affinity)
     }
 
     /* Check for SPI ranges */
-    if (!((id > 31U) && (id < 1020U)))
+    if ((id <= 31U) || (id >= 1020U))
     {
         /* Not a GICv3.0 SPI */
 
-        if (!((id > 4095U) && (id < 5120U)))
+        if ((id <= 4095U) || (id >= 5120U))
         {
             /* Not a GICv3.1 SPI either */
             return INTERRUPT_RETURN_INVALID_SPI;
@@ -393,7 +394,7 @@ int32_t gic_enable_int(uint32_t id, uint32_t rd)
         return INTERRUPT_RETURN_ERROR;
     }
 
-    if (id < 31U)
+    if (id < 32U)
     {
         /* Check rd in range */
         if (rd > gic_max_rd)
@@ -401,6 +402,14 @@ int32_t gic_enable_int(uint32_t id, uint32_t rd)
             return INTERRUPT_RETURN_INVALID_RDIST;
         }
 
+        if( id < 16 )
+        {
+            /*
+             * Clearing any SGIs used to yield the core, as enabling
+             * the interrupt may cause it to run a task prematurely
+             */
+            gic_rdist[rd].sgis.GICR_ICPENDR0 |= (1U << id);
+        }
         gic_rdist[rd].sgis.GICR_ISENABLER0 = (1U << id);
     }
     else if (id < 1020U)
@@ -496,7 +505,8 @@ int32_t gic_set_int_type(uint32_t id, uint32_t rd, uint32_t type)
     {
         if (id < 16U)
         {
-            return 1;
+            /* Not applicable to SGIs */
+            return 0;
         }
         else
         {
@@ -630,5 +640,5 @@ int32_t gic_set_int_pending(uint32_t id, uint32_t rd)
 
 void gic_enable_interrupts(void)
 {
-    __asm__ volatile ("msr DAIFClr, #0xf" ::: "memory");
+    __asm__ volatile ("msr DAIFClr, #0xF" ::: "memory");
 }

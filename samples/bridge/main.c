@@ -83,10 +83,6 @@ static void prvSetupHardware( void )
 
 void vApplicationIdleHook( void )
 {
-#if configENABLE_CONSOLE_UART
-    /*Clear any buffered prints to console*/
-    console_clear_pending();
-#endif
 }
 
 

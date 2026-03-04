@@ -30,6 +30,8 @@
  */
 
 .global _boot
+.global _secondary_boot
+.global _core_setup
 .global _prestart
 .global _cpu_init_hook
 .global _freertos_vector_table
@@ -39,7 +41,8 @@
 .global __el1_stack
 .global __el0_stack
 
-.set vector_base,	_freertos_vector_table
+.extern vCoreEntry
+.set vector_base, _freertos_vector_table
 //.section .boot,"ax"
 
 /*
@@ -52,56 +55,109 @@
 .set EL2_stack,     __el2_stack
 .set EL1_stack,     __el1_stack
 .set EL0_stack,     __el0_stack
+.set EL01_stack,    __el01_stack
+.set EL11_stack,    __el11_stack
+.set EL21_stack,    __el21_stack
 
-/* this initializes the various processor modes */
+.macro GET_CORE_ID reg
+    MRS     \reg, MPIDR_EL1
+    UBFX    \reg, \reg, #8, #8
+.endm
+
+/* Boot core execution starts here */
 _boot:
-	mov x0, #0
-	mov x1, #0
-	mov x2, #0
-	mov x3, #0
-	mov x4, #0
-	mov x5, #0
-	mov x6, #0
-	mov x7, #0
-	mov x8, #0
-	mov x9, #0
-	mov x10, #0
-	mov x11, #0
-	mov x12, #0
-	mov x13, #0
-	mov x14, #0
-	mov x15, #0
-	mov x16, #0
-	mov x17, #0
-	mov x18, #0
-	mov x19, #0
-	mov x20, #0
-	mov x21, #0
-	mov x22, #0
-	mov x23, #0
-	mov x24, #0
-	mov x25, #0
-	mov x26, #0
-	mov x27, #0
-	mov x28, #0
-	mov x29, #0
-	mov x30, #0
+	// Initialize the stack pointer of EL2.
+	ldr	x2,=EL2_stack
+	mov	sp, x2
 
-	MOV x1, #1             // Set NS bit, to access Non-secure registers
+	ldr	 x2,=EL1_stack
+	msr	 sp_el1,x2
 
-	ISB
-	MSR ICC_SRE_EL2, x0
-	ISB
-	MSR ICC_SRE_EL1, x1    // SRE = 1, Enable the Ssystem register interface for the current security level.
+	ldr x0, =EL0_stack // Load the stack pointer address for EL0 into x0
+	msr sp_el0, x0       // Set SP_EL0
 
-	mrs	x0, currentEL      // Read currentEL and jump based on currentl exception level.
-	cmp	x0, #0x8
-	beq	SwitchToEL1
+    bl _core_setup
 
-	cmp	x0, #0x4
-	beq	setupEL1
+    /*
+     * _mmu_configure(uint64_t setup)
+     * setup=1: setup PT, setup=0: do not setup PT
+     */
+    mov x0, #1
+    bl _mmu_configure
+    bl _mainCRTStartup
+    b error
 
-	b error			// go to error if current exception level is neither EL3 nor EL1
+_secondary_boot:
+	ldr	x2,=EL21_stack
+	mov	sp,x2
+
+	ldr	 x2,=EL11_stack
+	msr	 sp_el1,x2
+
+	ldr x0, =EL01_stack
+	msr sp_el0, x0
+
+    bl _core_setup
+
+    /*
+     * _mmu_configure(uint64_t setup)
+     * setup=1: setup PT, setup=0: do not setup PT
+     */
+    mov x0, #0
+    bl _mmu_configure
+    /* vCoreEntry should not return */
+    bl vCoreEntry
+    b error
+
+/* Contains setup instructions required by all cores */
+_core_setup:
+    mov x0, #0
+    mov x1, #0
+    mov x2, #0
+    mov x3, #0
+    mov x4, #0
+    mov x5, #0
+    mov x6, #0
+    mov x7, #0
+    mov x8, #0
+    mov x9, #0
+    mov x10, #0
+    mov x11, #0
+    mov x12, #0
+    mov x13, #0
+    mov x14, #0
+    mov x15, #0
+    mov x16, #0
+    mov x17, #0
+    mov x18, #0
+    mov x19, #0
+    mov x20, #0
+    mov x21, #0
+    mov x22, #0
+    mov x23, #0
+    mov x24, #0
+    mov x25, #0
+    mov x26, #0
+    mov x27, #0
+    mov x28, #0
+    mov x29, #0
+    /* X30 contains the return address */
+
+    MOV x1, #1             // Set NS bit, to access Non-secure registers
+
+    ISB
+    MSR ICC_SRE_EL2, x0
+    ISB
+    MSR ICC_SRE_EL1, x1    // SRE = 1, Enable the Ssystem register interface for the current security level.
+
+    mrs x0, currentEL      // Read currentEL and jump based on currentl exception level.
+    cmp x0, #0x8
+    beq SwitchToEL1
+
+    cmp x0, #0x4
+    beq setupEL1
+
+    b error         // go to error if current exception level is neither EL3 nor EL1
 
 SwitchToEL1:
 	// Initialize VBAR_EL3.
@@ -109,13 +165,6 @@ SwitchToEL1:
 	msr VBAR_EL2, x1
 	ldr x1, =vector_base
 	msr VBAR_EL1, x1
-
-	// Initialize the stack pointer of EL2.
-	ldr	x2,=EL2_stack
-	mov	sp,x2
-
-	ldr x0, =EL0_stack // Load the stack pointer address for EL0 into x0
-	msr sp_el0, x0       // Set SP_EL0
 
 	msr hcr_el2, xzr     // Clear the hcr_el2
 	ldr x1, =0x30C50838
@@ -158,19 +207,16 @@ setupEL1:
 	 * value which does not hold true now.
 	 */
 
-	/*Define stack pointer for current exception level*/
-	ldr	 x2,=EL1_stack
-	mov	 sp,x2
-
 	/* Disable MMU first */
 	mrs	x1, SCTLR_EL1
 	bic x1, x1, #0x1
 	orr x1, x1, #0x2
 	msr     SCTLR_EL1, x1
+	mov x0, #0b00100      // Use the EL1 stack from EL1.
+	msr spsr_el1, x0      // M[4:0]=00101 EL1h must match HCR_EL2.RW.
 	isb
-
-    bl _mmu_configure
-    bl _mainCRTStartup
+    dsb sy
+    ret
 
 error: 	b	error
 

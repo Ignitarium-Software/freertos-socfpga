@@ -82,7 +82,7 @@ struct seu_context
 {
     osal_semaphore_def_t seu_semphr_def;
     osal_semaphore_t seu_semphr;
-    sdm_client_handle pseu_handle;
+    sdm_client_handle_t pseu_handle;
     seu_call_back_t seu_call_back;
 };
 

@@ -295,7 +295,7 @@ gpio_handle_t gpio_open(gpio_pin_t pin)
     {
         return NULL;
     }
-    if (!is_pin_gpio((uint32_t)pin))
+    if (is_pin_gpio((uint32_t)pin) == false)
     {
         ERROR(
                 "The pin trying to open is allocated for different interface in Pinmux REG");
@@ -386,7 +386,7 @@ int32_t gpio_read_sync(gpio_handle_t const hgpio, uint8_t *pstate)
     {
         return -EINVAL;
     }
-    if (!(hgpio->is_open))
+    if (hgpio->is_open == 0)
     {
         return -EINVAL;
     }
@@ -400,7 +400,7 @@ int32_t gpio_write_sync(gpio_handle_t const hgpio, uint8_t state)
     {
         return -EINVAL;
     }
-    if (!(hgpio->is_open))
+    if (hgpio->is_open == 0)
     {
         return -EINVAL;
     }

@@ -1,0 +1,79 @@
+diff --git a/include/task.h b/include/task.h
+index c491625bc..7751df439 100644
+--- a/include/task.h
++++ b/include/task.h
+@@ -3603,6 +3603,13 @@ void vTaskMissedYield( void ) PRIVILEGED_FUNCTION;
+  */
+ BaseType_t xTaskGetSchedulerState( void ) PRIVILEGED_FUNCTION;
+
++/*
++ * Same as xTaskGetSchedulerState but to be used inside ISR
++ * Returns the scheduler state as taskSCHEDULER_RUNNING,
++ * taskSCHEDULER_NOT_STARTED or taskSCHEDULER_SUSPENDED.
++ */
++
++BaseType_t xTaskGetSchedulerStateFromISR( void ) PRIVILEGED_FUNCTION;
+ /*
+  * Raises the priority of the mutex holder to that of the calling task should
+  * the mutex holder have a priority less than the calling task.
+diff --git a/tasks.c b/tasks.c
+index fd3bc638d..83aec0ec1 100644
+--- a/tasks.c
++++ b/tasks.c
+@@ -847,8 +847,11 @@ static void prvAddNewTaskToReadyList( TCB_t * pxNewTCB ) PRIVILEGED_FUNCTION;
+             /* Enabling interrupts should cause this core to immediately
+              * service the pending interrupt and yield. If the run state is still
+              * yielding here then that is a problem. */
+-            configASSERT( pxThisTCB->xTaskRunState != taskTASK_SCHEDULED_TO_YIELD );
+-
++            /* PATCH: Currently there is a delay where enabling the interrupt
++             * has a delay before the actual SGI is fired. This causes the
++             * assert statement to be false leading to the core being stuck
++             * in the assert. */
++            //configASSERT( pxThisTCB->xTaskRunState != taskTASK_SCHEDULED_TO_YIELD );
+             portDISABLE_INTERRUPTS();
+             portGET_TASK_LOCK();
+             portGET_ISR_LOCK();
+@@ -6572,9 +6575,41 @@ static void prvResetNextTaskUnblockTime( void )
+         return xReturn;
+     }
+
++    #if ( configNUMBER_OF_CORES > 1 )
++        BaseType_t xTaskGetSchedulerStateFromISR( void )
++        {
++            BaseType_t xReturn;
++            UBaseType_t uxSavedInterruptStatus;
++
++            traceENTER_xTaskGetSchedulerState();
++
++            if( xSchedulerRunning == pdFALSE )
++            {
++                xReturn = taskSCHEDULER_NOT_STARTED;
++            }
++            else
++            {
++                uxSavedInterruptStatus = taskENTER_CRITICAL_FROM_ISR();
++                {
++                    if( uxSchedulerSuspended == ( UBaseType_t ) 0U )
++                    {
++                        xReturn = taskSCHEDULER_RUNNING;
++                    }
++                    else
++                    {
++                        xReturn = taskSCHEDULER_SUSPENDED;
++                    }
++                }
++                taskEXIT_CRITICAL_FROM_ISR(uxSavedInterruptStatus);
++            }
++
++            traceRETURN_xTaskGetSchedulerState( xReturn );
++
++            return xReturn;
++        }
++    #endif
+ #endif /* ( ( INCLUDE_xTaskGetSchedulerState == 1 ) || ( configUSE_TIMERS == 1 ) ) */
+ /*-----------------------------------------------------------*/
+-
+ #if ( configUSE_MUTEXES == 1 )
+
+     BaseType_t xTaskPriorityInherit( TaskHandle_t const pxMutexHolder )

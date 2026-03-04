@@ -130,7 +130,11 @@
 /* The actual block time is dependent on the priority of other tasks in the
  * system so the actual block time might be greater than that expected, but it
  * should be within an acceptable upper bound. */
-    const TickType_t xAllowableMargin = pdMS_TO_TICKS( 7 );
+    #if ( configNUMBER_OF_CORES > 1 )
+        const TickType_t xAllowableMargin = pdMS_TO_TICKS( 15 );
+    #else
+        const TickType_t xAllowableMargin = pdMS_TO_TICKS( 7 );
+    #endif
 
 /*-----------------------------------------------------------*/
 

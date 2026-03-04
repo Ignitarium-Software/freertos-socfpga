@@ -10,10 +10,11 @@
 #define __XHCI_RINGS_H__
 
 #include <stdio.h>
+#include <stdint.h>
 
-#define XHCI_EVENT_RING_TABLE_SZ    (1U)
-#define ERDP                        (0x11001038)
-#define PORTSC                      (0x11000420)
+#define XHCI_EVENT_RING_TABLE_SZ    1U
+#define ERDP                        0x11001038U
+#define PORTSC                      0x11000420U
 
 /*
  * @struct  xhci_trb_t
@@ -50,7 +51,7 @@ typedef struct __attribute__ ((packed))
 } xcr_command_ring_t;
 
 /*
- * @struct  xhci_erst_entry
+ * @struct  xhci_erst_entry_t
  * @brief   Event Ring Segment table Entry ( ERST)
  */
 typedef struct __attribute__ ((packed))
@@ -58,7 +59,7 @@ typedef struct __attribute__ ((packed))
     uint64_t seg_addr;      /* !< xhci event ring segment address*/
     uint32_t seg_size;      /* !< xhci event ring segment size */
     uint32_t rsvd;          /* reserved */
-} xhci_erst_entry;
+} xhci_erst_entry_t;
 
 /*
  * @struct  xer_event_ring_t
@@ -68,7 +69,7 @@ typedef struct __attribute__ ((packed))
 {
     uint32_t trb_count;         /*!< Number of trbs in the event ring */
     xhci_trb_t *xer_enqueue_ptr;    /*!< xhci event ring enqueue pointer*/
-    xhci_erst_entry *erst_ptr;      /* !< reference to xhci event ring segment table */
+    xhci_erst_entry_t *erst_ptr;      /* !< reference to xhci event ring segment table */
 
 } xer_event_ring_t;
 
@@ -119,4 +120,3 @@ int is_link_trb(xhci_trb_t *ptr);
 xhci_trb_t *get_next_trb_segment(xhci_trb_t *ptr, uint8_t *pcs_flag);
 
 #endif /* __XHCI_RINGS_H__ */
-

@@ -1,6 +1,7 @@
 /*
  * Common IO - basic V1.0.0
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ * Copyright (C) 2025-2026 Altera Corporation.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -21,10 +22,6 @@
  *
  * http://aws.amazon.com/freertos
  * http://www.FreeRTOS.org
- */
-
-/*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
  *
  * Modified function names and other definitions for SoC FPGA
  */
@@ -34,7 +31,7 @@
 
 /**
  * @file socfpga_uart.h
- * @brief SoC FPGA UART HAL driver
+ * @brief SoC FPGA UART HAL driver.
  */
 
 #include "socfpga_defines.h"
@@ -42,7 +39,7 @@
 /**
  * @defgroup uart UART
  * @ingroup drivers
- * @brief APIs for SoC FPGA UART driver.
+ * @brief APIs for the SoC FPGA UART driver.
  * @details This is the UART driver implementation for SoC FPGA.
  * It provides APIs for reading and writing data over UART
  * in synchronous and asynchronous modes. Basic configuration includes
@@ -91,7 +88,7 @@
 /* end of group uart_macros */
 
 /**
- * @brief UART read/write operation status values
+ * @brief UART read/write operation status values.
  * @ingroup uart_enums
  */
 typedef enum
@@ -103,7 +100,7 @@ typedef enum
 } uart_op_status_t;
 
 /**
- * @brief UART parity mode
+ * @brief UART parity mode.
  * @ingroup uart_enums
  */
 typedef enum
@@ -114,7 +111,7 @@ typedef enum
 } uart_partity_t;
 
 /**
- * @brief UART stop bits
+ * @brief UART stop bits.
  * @ingroup uart_enums
  */
 typedef enum
@@ -142,7 +139,7 @@ typedef void (*uart_callback_t)(uart_op_status_t status, void *param);
 struct uart_descriptor;
 
 /**
- * @brief uart_handle_t is the handle type returned by calling uart_open().
+ * @brief uart_handle_t is the handle type returned by uart_open().
  * This is initialized in open and returned to caller. The caller must pass
  * this pointer to the rest of APIs.
  * @ingroup uart_structs
@@ -194,7 +191,7 @@ typedef struct
  */
 
 /**
- * @brief Initializes the UART peripheral of the board.
+ * @brief Initialize the UART peripheral of the board.
  *
  * The application should call this function to initialize the desired UART port.
  *
@@ -211,7 +208,7 @@ typedef struct
 uart_handle_t uart_open(uint32_t instance);
 
 /**
- * @brief Sets the application callback to be called on completion of an operation.
+ * @brief Set the application callback to be called on completion of an operation.
  *
  * The callback is guaranteed to be invoked when the current asynchronous operation completes, either successful or failed.
  * This simply provides a notification mechanism to user's application. It has no impact if the callback is not set.
@@ -234,7 +231,7 @@ int32_t uart_set_callback(uart_handle_t const huart, uart_callback_t callback,
         void *param);
 
 /**
- * @brief Starts receiving the data from UART synchronously.
+ * @brief Start receiving data from UART synchronously.
  *
  * This function attempts to read certain number of bytes from transmitter device to a pre-allocated buffer, in synchronous way.
  * Partial read might happen.
@@ -251,7 +248,7 @@ int32_t uart_set_callback(uart_handle_t const huart, uart_callback_t callback,
  * - -EINVAL: if
  *     - huart is NULL
  *     - huart is not opened yet
- *     - pucBuffer is NULL
+ *     - buf is NULL
  *     - nbytes is 0
  * - -EIO:    if there is unknown driver error
  * - -EBUSY:  if another read is in progress.
@@ -260,7 +257,7 @@ int32_t uart_read_sync(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes);
 
 /**
- * @brief Starts the transmission of data from UART synchronously.
+ * @brief Start transmitting data from UART synchronously.
  *
  * This function attempts to write certain number of bytes from a pre-allocated buffer to a receiver device, in synchronous way.
  * Partial write might happen.
@@ -275,7 +272,7 @@ int32_t uart_read_sync(uart_handle_t const huart, uint8_t *const buf,
  * - -EINVAL: if
  *     - huart is NULL
  *     - huart is not opened yet
- *     - pucBuffer is NULL
+ *     - buf is NULL
  *     - nbytes is 0
  * - -EIO:    if there is unknown driver error
  * - -EBUSY:  if another write is in progress
@@ -284,7 +281,30 @@ int32_t uart_write_sync(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes);
 
 /**
- * @brief Starts receiving the data from UART asynchronously.
+ * @brief Transmit data through UART using polling.
+ *
+ * This function is not thread safe, use UART sync/async write functions for
+ * thread safety.
+ * This function attempts to write certain number of bytes from a pre-allocated buffer
+ * to a receiver device, using polling.
+ *
+ * @param[in] huart  The peripheral handle returned in the open() call.
+ * @param[in] buf    The buffer with data to transmit.
+ * @param[in] nbytes The number of bytes to send.
+ *
+ * @return
+ * - UART_SUCCESS: on success
+ * - -EINVAL: if
+ *     - huart is NULL
+ *     - huart is not opened yet
+ *     - buf is NULL
+ *     - nbytes is 0
+ */
+int32_t uart_write_polling(uart_handle_t const huart, uint8_t *const buf,
+        uint32_t nbytes);
+
+/**
+ * @brief Start receiving data from UART asynchronously.
  *
  * This function attempts to read certain number of bytes from a pre-allocated buffer, in asynchronous way.
  * It returns immediately when the operation is started and the status can be checked by calling uart_ioctl.
@@ -294,7 +314,7 @@ int32_t uart_write_sync(uart_handle_t const huart, uint8_t *const buf,
  * And the number of bytes that have been actually read can be obtained by calling uart_ioctl.
  *
  * @note In order to get notification when the asynchronous call is completed, uart_set_callback must be called prior to this.
- * @warning pucBuffer must be valid before callback is invoked.
+ * @warning buf must be valid before callback is invoked.
  *
  * @param[in]  huart  The peripheral handle returned in the open() call.
  * @param[out] buf    The buffer to store the received data.
@@ -305,7 +325,7 @@ int32_t uart_write_sync(uart_handle_t const huart, uint8_t *const buf,
  * - -EINVAL: if
  *     - huart is NULL
  *     - huart is not opened yet
- *     - pucBuffer is NULL
+ *     - buf is NULL
  *     - nbytes is 0
  * - -EIO:    if there is unknown driver error
  */
@@ -313,7 +333,7 @@ int32_t uart_read_async(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes);
 
 /**
- * @brief Starts the transmission of data from UART asynchronously.
+ * @brief Start transmitting data from UART asynchronously.
  *
  * This function attempts to write certain number of bytes from a pre-allocated buffer to a receiver device, in asynchronous way.
  * It returns immediately when the operation is started and the status can be checked by calling uart_ioctl.
@@ -334,7 +354,7 @@ int32_t uart_read_async(uart_handle_t const huart, uint8_t *const buf,
  * - -EINVAL: if
  *     - huart is NULL
  *     - huart is not opened yet
- *     - pucBuffer is NULL
+ *     - buf is NULL
  *     - nbytes is 0
  * - -EIO:   if there is unknown driver error
  */
@@ -342,7 +362,7 @@ int32_t uart_write_async(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes);
 
 /**
- * @brief Configures the UART port with user configuration.
+ * @brief Configure the UART port with user configuration.
  *
  *
  * @note UART_SET_CONFIG sets the UART configuration.
@@ -375,14 +395,14 @@ int32_t uart_write_async(uart_handle_t const huart, uint8_t *const buf,
  * - -EBUSY:  if the UART tx or rx transfer is in progress.
  * - -EINVAL: if
  *     - huart is not opened yet
- *     - pucBuffer is NULL
+ *     - buf is NULL
  *     - cmd is invalid
  */
 int32_t uart_ioctl(uart_handle_t const huart, uart_ioctl_t cmd,
         void *const buf);
 
 /**
- * @brief Aborts the operation on the UART port if any underlying driver allows
+ * @brief Abort the operation on the UART port if any underlying driver allows
  * cancellation of the operation.
  *
  * The application should call this function to stop the ongoing operation.
@@ -398,7 +418,7 @@ int32_t uart_ioctl(uart_handle_t const huart, uart_ioctl_t cmd,
 int32_t uart_cancel(uart_handle_t const huart);
 
 /**
- * @brief Stops the operation and de-initializes the UART peripheral.
+ * @brief Stop the operation and de-initialize the UART peripheral.
  *
  *
  * @param[in] huart The peripheral handle returned in the open() call.

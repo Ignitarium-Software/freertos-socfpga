@@ -64,11 +64,11 @@
 struct sdm_client_descriptor;
 
 /**
- * @brief sdm_client_handle type is the Mailbox Client handle returned by calling open_client()
+ * @brief sdm_client_handle_t type is the Mailbox Client handle returned by calling open_client()
  *        this is initialized in open and returned to caller. Caller must pass this pointer
  *        to the rest of the APIs.
  */
-typedef struct sdm_client_descriptor *sdm_client_handle;
+typedef struct sdm_client_descriptor *sdm_client_handle_t;
 
 /**
  * @}
@@ -110,7 +110,7 @@ int mbox_deinit(void);
  * - The handle if the client is opened successfully
  * - NULL if there is an error
  */
-sdm_client_handle mbox_open_client(void);
+sdm_client_handle_t mbox_open_client(void);
 
 /**
  * @brief Close the mbox client
@@ -121,7 +121,7 @@ sdm_client_handle mbox_open_client(void);
  * - 0: on success.
  * - -EIO: if some internal errors occur.
  */
-int32_t mbox_close_client(sdm_client_handle mbox_handle);
+int32_t mbox_close_client(sdm_client_handle_t mbox_handle);
 
 /**
  * @brief Send a generic mailbox command
@@ -143,7 +143,7 @@ int32_t mbox_close_client(sdm_client_handle mbox_handle);
  * - -EIO: If some internal errors occur.
  */
 
-int32_t mbox_send_command(sdm_client_handle mbox_handle, uint32_t command,
+int32_t mbox_send_command(sdm_client_handle_t mbox_handle, uint32_t command,
         uint32_t *command_args, uint32_t arg_size,
         uint32_t *resp, uint32_t resp_size,
         uint64_t *smc_resp, uint32_t smc_resp_len);
@@ -163,7 +163,7 @@ int32_t mbox_send_command(sdm_client_handle mbox_handle, uint32_t command,
  * - 0: on success.
  * - -EIO: If some internal errors occur.
  */
-int32_t sip_svc_send(sdm_client_handle mbox_handle, uint64_t smc_func_id,
+int32_t sip_svc_send(sdm_client_handle_t mbox_handle, uint64_t smc_func_id,
         uint64_t *mbox_args, uint32_t arg_len, uint64_t *resp_data, uint32_t
         resp_len);
 
@@ -180,7 +180,7 @@ int32_t sip_svc_send(sdm_client_handle mbox_handle, uint64_t smc_func_id,
  * - 0: on success.
  * - -EIO: if some internal errors occur.
  */
-int32_t mbox_set_callback(sdm_client_handle mbox_handle, mbox_call_back_t
+int32_t mbox_set_callback(sdm_client_handle_t mbox_handle, mbox_call_back_t
         callback);
 
 /**
@@ -194,4 +194,3 @@ int32_t mbox_set_callback(sdm_client_handle mbox_handle, mbox_call_back_t
 /* end of group sdm_mbox */
 
 #endif /*_SOCFPGA_MBOX_CLIENT_H_*/
-

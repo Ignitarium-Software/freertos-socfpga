@@ -22,16 +22,16 @@
 static void *error_inj_mem_sb = NULL;
 static void *error_inj_mem_db = NULL;
 
-static xiossm_context iossm_var[IOSSM_NUM_INSTANCE];
+static iossm_context_t iossm_var[IOSSM_NUM_INSTANCE];
 
 void iossm_irq_handler(void *pparam);
 
-xiossm_context *iossm_open(uint32_t instance)
+iossm_context_t *iossm_open(uint32_t instance)
 {
-    response_data resp_data;
-    iossm_type iossm_desc;
+    iossm_response_data_t resp_data;
+    iossm_type_t iossm_desc;
     socfpga_interrupt_err_t int_ret;
-    xiossm_context *iossm_handle;
+    iossm_context_t *iossm_handle;
 
 
     if (instance > IOSSM_INSTANCE_1)
@@ -96,7 +96,7 @@ xiossm_context *iossm_open(uint32_t instance)
     return iossm_handle;
 }
 
-int32_t iossm_read_ecc_status(const xiossm_context *xhandle)
+int32_t iossm_read_ecc_status(const iossm_context_t *xhandle)
 {
     uint32_t status;
 
@@ -119,10 +119,10 @@ int32_t iossm_read_ecc_status(const xiossm_context *xhandle)
 }
 
 
-int32_t iossm_clear_ecc_buffer(const xiossm_context *xhandle)
+int32_t iossm_clear_ecc_buffer(const iossm_context_t *xhandle)
 {
-    response_data resp_data;
-    iossm_type iossm_desc;
+    iossm_response_data_t resp_data;
+    iossm_type_t iossm_desc;
     uint32_t status;
 
     if (xhandle == NULL)
@@ -152,10 +152,10 @@ int32_t iossm_clear_ecc_buffer(const xiossm_context *xhandle)
     return status;
 }
 
-int32_t iossm_inject_sbit_err(const xiossm_context *xhandle)
+int32_t iossm_inject_sbit_err(const iossm_context_t *xhandle)
 {
-    response_data resp_data;
-    iossm_type iossm_desc;
+    iossm_response_data_t resp_data;
+    iossm_type_t iossm_desc;
 
     if (xhandle == NULL)
     {
@@ -171,6 +171,10 @@ int32_t iossm_inject_sbit_err(const xiossm_context *xhandle)
     if (error_inj_mem_sb == NULL)
     {
         error_inj_mem_sb = pvPortMallocCoherent(10);
+        if (error_inj_mem_sb == NULL)
+        {
+            return -ENOMEM;
+        }
     }
 
     iossm_desc.base_addr = xhandle->iossm_base_addr;
@@ -191,10 +195,10 @@ int32_t iossm_inject_sbit_err(const xiossm_context *xhandle)
     return 0;
 }
 
-int32_t iossm_inject_dbit_err(const xiossm_context *xhandle)
+int32_t iossm_inject_dbit_err(const iossm_context_t *xhandle)
 {
-    response_data resp_data;
-    iossm_type iossm_desc;
+    iossm_response_data_t resp_data;
+    iossm_type_t iossm_desc;
 
     if (xhandle == NULL)
     {
@@ -210,6 +214,10 @@ int32_t iossm_inject_dbit_err(const xiossm_context *xhandle)
     if (error_inj_mem_db == NULL)
     {
         error_inj_mem_db = pvPortMallocCoherent(10);
+        if (error_inj_mem_db == NULL)
+        {
+            return -ENOMEM;
+        }
     }
 
     iossm_desc.base_addr = xhandle->iossm_base_addr;
@@ -230,10 +238,10 @@ int32_t iossm_inject_dbit_err(const xiossm_context *xhandle)
     return 0;
 }
 
-int32_t iossm_mask_int(const xiossm_context *xhandle, uint32_t interrupts)
+int32_t iossm_mask_int(const iossm_context_t *xhandle, uint32_t interrupts)
 {
-    response_data resp_data;
-    iossm_type iossm_desc;
+    iossm_response_data_t resp_data;
+    iossm_type_t iossm_desc;
 
     if (xhandle == NULL)
     {
@@ -261,10 +269,10 @@ int32_t iossm_mask_int(const xiossm_context *xhandle, uint32_t interrupts)
     return 0;
 }
 
-int32_t iossm_ack_int(const xiossm_context *xhandle, uint32_t interrupts)
+int32_t iossm_ack_int(const iossm_context_t *xhandle, uint32_t interrupts)
 {
-    response_data resp_data;
-    iossm_type iossm_desc;
+    iossm_response_data_t resp_data;
+    iossm_type_t iossm_desc;
 
     if (xhandle == NULL)
     {
@@ -291,7 +299,7 @@ int32_t iossm_ack_int(const xiossm_context *xhandle, uint32_t interrupts)
     return 0;
 }
 
-int32_t iossm_get_err_type(const xiossm_context *xhandle, uint32_t index)
+int32_t iossm_get_err_type(const iossm_context_t *xhandle, uint32_t index)
 {
     uint32_t status;
 
@@ -311,7 +319,7 @@ int32_t iossm_get_err_type(const xiossm_context *xhandle, uint32_t index)
     return (int32_t)IOSSM_ECC_ERR_TYP_FIELD(status);
 }
 
-int32_t iossm_get_err_addr_offset(const xiossm_context *xhandle, uint32_t index)
+int32_t iossm_get_err_addr_offset(const iossm_context_t *xhandle, uint32_t index)
 {
     int32_t offset;
 
@@ -335,7 +343,7 @@ int32_t iossm_get_err_addr_offset(const xiossm_context *xhandle, uint32_t index)
 
 void iossm_irq_handler(void *pparam)
 {
-    xiossm_context *iossm_handle = (xiossm_context *)pparam;
+    iossm_context_t *iossm_handle = (iossm_context_t *)pparam;
 
     if (iossm_handle->iossm_cb_fun != NULL)
     {
@@ -343,7 +351,7 @@ void iossm_irq_handler(void *pparam)
     }
 }
 
-void iossm_set_callback(xiossm_context *xhandle, iossm_cb_handler call_back_fun)
+void iossm_set_callback(iossm_context_t *xhandle, iossm_cb_handler_t call_back_fun)
 {
     xhandle->iossm_cb_fun = call_back_fun;
 }

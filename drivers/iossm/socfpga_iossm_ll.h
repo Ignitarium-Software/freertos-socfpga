@@ -77,7 +77,7 @@ typedef struct
     uint32_t cmd_type;
     uint32_t opcode;
     uint32_t reg_val;
-} req_payload;
+} iossm_req_payload_t;
 
 /*
  * iossm command response data
@@ -88,7 +88,7 @@ typedef struct
     uint32_t resp1;
     uint32_t resp2;
     uint32_t status;
-} response_data;
+} iossm_response_data_t;
 
 /*
  * iossm interface data
@@ -98,11 +98,13 @@ typedef struct
     uint32_t base_addr;
     uint32_t ip_type;
     uint32_t instance_id;
-} iossm_type;
+} iossm_type_t;
 
-response_data iossm_send_command(iossm_type const *iossm_data, uint32_t request, uint32_t param);
+iossm_response_data_t iossm_send_command(iossm_type_t const *iossm_data, uint32_t request,
+        uint32_t param);
 
-response_data iossm_err_inject_command(iossm_type const *iossm_data, void *address, uint32_t param);
+iossm_response_data_t iossm_err_inject_command(iossm_type_t const *iossm_data, void *address,
+        uint32_t param);
 
 uint32_t iossm_read_register(uint32_t base_addr, uint32_t reg);
 

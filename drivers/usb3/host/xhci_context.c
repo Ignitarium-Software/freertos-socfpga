@@ -379,6 +379,10 @@ void display_xhci_device_params(struct xhci_device_data *dev_data)
     DEBUG("Device Slot: %d", dev_data->slot_id);
     DEBUG("Device rh port: %d", dev_data->rh_port);
     DEBUG("Device speed : %s", dev_speed[dev_data->dev_speed]);
+
+    /* Suppressing unused variable warning when not using DEBUG logs. */
+    (void)dev_data;
+    (void)dev_speed;
 }
 
 void update_device_dev_speed(struct xhci_data *xhci_ptr)
@@ -434,6 +438,8 @@ void display_ip_context(xhci_ip_device_context_t *ip_ctx)
     DEBUG(" Field 1 : %lx", ip_ctx->xe_context[0].xec_info);
     DEBUG(" Field 2 : %lx", ip_ctx->xe_context[0].xec_dequeue);
     DEBUG(" Field 3 : %lx", ip_ctx->xe_context[0].xec_info2);
+
+    (void)ip_ctx;
 }
 
 void display_op_context(xhci_op_device_context_t *op_ctx)
@@ -456,4 +462,6 @@ void display_op_context(xhci_op_device_context_t *op_ctx)
     DEBUG(" Field 1 : %lx", op_ctx->EP[3].xec_info);
     DEBUG(" Field 2 : %lx", op_ctx->EP[3].xec_dequeue);
     DEBUG(" Field 3 : %lx \r\n", op_ctx->EP[3].xec_info2);
+
+    (void)op_ctx;
 }

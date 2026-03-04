@@ -1,7 +1,7 @@
 /*
  * FreeRTOS Kernel V10.5.1
  * Copyright (C) 2021 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
- * Copyright (c) 2025 Altera Corporation.
+ * Copyright (c) 2025-2026 Altera Corporation.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -62,14 +62,14 @@ typedef uint64_t         TickType_t;
 
 /* 32-bit tick type on a 32-bit architecture, so reads of the tick count do
 not need to be guarded with a critical section. */
-#define portTICK_TYPE_IS_ATOMIC    1
+#define portTICK_TYPE_IS_ATOMIC    ( 1 )
 
 /*-----------------------------------------------------------*/
 
 /* Hardware specifics. */
 #define portSTACK_GROWTH         ( -1 )
 #define portTICK_PERIOD_MS       ( ( TickType_t ) 1000 / configTICK_RATE_HZ )
-#define portBYTE_ALIGNMENT       16
+#define portBYTE_ALIGNMENT       ( 16 )
 #define portPOINTER_SIZE_TYPE    uint64_t
 
 /*-----------------------------------------------------------*/
@@ -77,19 +77,21 @@ not need to be guarded with a critical section. */
 /* Task utilities. */
 
 /* Called at the end of an ISR that can cause a context switch. */
-#define portEND_SWITCHING_ISR( xSwitchRequired ) \
-{                                                \
-extern uint64_t ullPortYieldRequired;            \
-                                                 \
-    if( xSwitchRequired != pdFALSE )             \
-    {                                            \
-        ullPortYieldRequired = pdTRUE;           \
-    }                                            \
+#define portEND_SWITCHING_ISR( xSwitchRequired )            \
+{                                                           \
+extern uint64_t ullPortYieldRequired[];                     \
+                                                            \
+    if( ( xSwitchRequired ) != pdFALSE )                    \
+    {                                                       \
+        ullPortYieldRequired[ ulGetCoreId() ] = pdTRUE;     \
+    }                                                       \
 }
 
 #define portYIELD_FROM_ISR( x )    portEND_SWITCHING_ISR( x )
-#define portYIELD()                __asm volatile ( "SVC 0" ::: "memory" )
+#define portYIELD()                                            \
+        __asm volatile ( "SVC 0" ::: "memory" );               \
 
+#define portYIELD_CORE( x )        vYieldCore( x )
 /*-----------------------------------------------------------
 * Critical section control
 *----------------------------------------------------------*/
@@ -99,24 +101,103 @@ extern void vPortExitCritical( void );
 extern UBaseType_t uxPortSetInterruptMask( void );
 extern void vPortClearInterruptMask( UBaseType_t uxNewMaskValue );
 extern void vPortInstallFreeRTOSVectorTable( void );
+uint32_t ulRawReadICC_PMR_EL1( void );
+void ulRawWriteICC_PMR_EL1( uint32_t pmr );
 
-#define portDISABLE_INTERRUPTS()                   \
-__asm volatile ( "MSR DAIFSET, #2" ::: "memory" ); \
-__asm volatile ( "DSB SY" );                       \
+#define portUNMASK_VALUE                 ( 0xFFUL )
+
+#define portCHECK_DAIF()                            \
+    do {                                            \
+    uint32_t daif;                                  \
+    __asm volatile("MRS %0, DAIF" : "=r"(daif)::);  \
+    daif;                                           \
+    } while(0)
+
+#define portICCPMR_PRIORITY_MASK \
+    ((uint32_t)(configMAX_SYSCALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT))
+
+#define portCPU_IRQ_DISABLE()                       \
+__asm volatile ( "MSR DAIFSET, #2" ::: "memory" );  \
+__asm volatile ( "DSB SY" );                        \
 __asm volatile ( "ISB SY" );
 
-#define portENABLE_INTERRUPTS()                    \
-__asm volatile ( "MSR DAIFCLR, #2" ::: "memory" ); \
-__asm volatile ( "DSB SY" );                       \
-__asm volatile ( "ISB SY" );
+#define portCPU_IRQ_ENABLE()                            \
+    __asm volatile ( "MSR DAIFCLR, #2" ::: "memory" );  \
+    __asm volatile ( "DSB SY" );                        \
+    __asm volatile ( "ISB SY" );
 
+#define portDISABLE_INTERRUPTS()                        \
+    do {                                                \
+        ulRawWriteICC_PMR_EL1( ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) );\
+        __asm volatile ("DSB SY" ::: "memory");         \
+        __asm volatile ("ISB SY" ::: "memory");         \
+    } while(0)
+
+#define portENABLE_INTERRUPTS()                         \
+    do {                                                \
+        __asm volatile ( "msr ICC_PMR_EL1, %0\n" : : "r" ( portUNMASK_VALUE ) : "memory" );\
+        __asm volatile ("DSB SY" ::: "memory");         \
+        __asm volatile ("ISB SY" ::: "memory");         \
+    } while(0)
+
+#define portSET_INTERRUPT_MASK()                        \
+    ({                                                  \
+        uint32_t __pmr;                                 \
+        __pmr = ulRawReadICC_PMR_EL1();                 \
+        if (__pmr != (configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT))          \
+        {                                               \
+            ulRawWriteICC_PMR_EL1( ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) );\
+            __asm volatile ("DSB SY" ::: "memory");     \
+            __asm volatile ("ISB SY" ::: "memory");     \
+        }                                               \
+        __pmr;                                          \
+    })
+
+#define portCLEAR_INTERRUPT_MASK(pmr)                   \
+    do {                                                \
+        ulRawWriteICC_PMR_EL1( ( uint32_t ) ( pmr));    \
+        __asm volatile ("DSB SY" ::: "memory");         \
+        __asm volatile ("ISB SY" ::: "memory");         \
+    } while(0)
+
+#define portSET_INTERRUPT_MASK_FROM_ISR()               \
+    ({                                                  \
+        uint32_t __pmr;                                 \
+        __pmr = ulRawReadICC_PMR_EL1();                 \
+        if (__pmr != (configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT))          \
+        {                                               \
+            ulRawWriteICC_PMR_EL1( ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) );\
+            __asm volatile ("DSB SY" ::: "memory");     \
+            __asm volatile ("ISB SY" ::: "memory");     \
+        }                                               \
+        __pmr;                                          \
+    })
+
+#define portCLEAR_INTERRUPT_MASK_FROM_ISR(pmr)          \
+    do {                                                \
+        ulRawWriteICC_PMR_EL1( ( uint32_t ) ( pmr));    \
+        __asm volatile ("DSB SY" ::: "memory");         \
+        __asm volatile ("ISB SY" ::: "memory");         \
+    } while(0)
 /* These macros do not globally disable/enable interrupts.  They do mask off
 interrupts that have a priority below configMAX_API_CALL_INTERRUPT_PRIORITY. */
-#define portENTER_CRITICAL()                      vPortEnterCritical();
-#define portEXIT_CRITICAL()                       vPortExitCritical();
-#define portSET_INTERRUPT_MASK_FROM_ISR()         uxPortSetInterruptMask()
-#define portCLEAR_INTERRUPT_MASK_FROM_ISR( x )    vPortClearInterruptMask( x )
-
+#if configNUMBER_OF_CORES == 1
+    #define portENTER_CRITICAL()                      vPortEnterCritical();
+    #define portEXIT_CRITICAL()                       vPortExitCritical();
+#else
+    #define portGET_CORE_ID()                         ulGetCoreId()
+    extern volatile uint64_t ullCriticalNesting[ configNUMBER_OF_CORES ];
+    extern uint64_t ullPortInterruptNesting[ configNUMBER_OF_CORES ];
+    #define portGET_CRITICAL_NESTING_COUNT()          ( ullCriticalNesting[ portGET_CORE_ID() ] )
+    #define portSET_CRITICAL_NESTING_COUNT( x )       ( ullCriticalNesting[ portGET_CORE_ID() ] = ( x ) )
+    #define portINCREMENT_CRITICAL_NESTING_COUNT()    ( ullCriticalNesting[ portGET_CORE_ID() ]++ )
+    #define portDECREMENT_CRITICAL_NESTING_COUNT()    ( ullCriticalNesting[ portGET_CORE_ID() ]-- )
+    #define portENTER_CRITICAL()                      vTaskEnterCritical()
+    #define portEXIT_CRITICAL()                       vTaskExitCritical()
+    #define portASSERT_IF_IN_ISR()                    configASSERT( xPortIsInsideInterrupt() == pdFALSE )
+#endif
+#define portENTER_CRITICAL_FROM_ISR()             vTaskEnterCriticalFromISR()
+#define portEXIT_CRITICAL_FROM_ISR( x )           vTaskExitCriticalFromISR( x )
 /*-----------------------------------------------------------*/
 
 /* Task function macros as described on the FreeRTOS.org WEB site.  These are
@@ -145,12 +226,12 @@ void vPortTaskUsesFPU( void );
 #if configUSE_PORT_OPTIMISED_TASK_SELECTION == 1
 
     /* Store/clear the ready priorities in a bit map. */
-    #define portRECORD_READY_PRIORITY( uxPriority, uxReadyPriorities )    ( uxReadyPriorities ) |= ( 1UL << ( uxPriority ) )
-    #define portRESET_READY_PRIORITY( uxPriority, uxReadyPriorities )     ( uxReadyPriorities ) &= ~( 1UL << ( uxPriority ) )
+    #define portRECORD_READY_PRIORITY( uxPriority, uxReadyPriorities )    ( ( uxReadyPriorities ) |= ( 1UL << ( uxPriority ) ) )
+    #define portRESET_READY_PRIORITY( uxPriority, uxReadyPriorities )     ( ( uxReadyPriorities ) &= ~( 1UL << ( uxPriority ) ) )
 
     /*-----------------------------------------------------------*/
 
-    #define portGET_HIGHEST_PRIORITY( uxTopPriority, uxReadyPriorities )    uxTopPriority = ( 31 - __builtin_clz( uxReadyPriorities ) )
+    #define portGET_HIGHEST_PRIORITY( uxTopPriority, uxReadyPriorities )    ( ( uxTopPriority ) = ( 31UL - ( uint32_t ) __builtin_clz( ( uxReadyPriorities ) ) ) )
 
 #endif /* configUSE_PORT_OPTIMISED_TASK_SELECTION */
 
@@ -204,7 +285,36 @@ number of bits implemented by the interrupt controller. */
 
 #define portMEMORY_BARRIER()    __asm volatile ( "" ::: "memory" )
 
+enum {
+    PORT_ISR_SPIN_LOCK,
+    PORT_TASK_SPIN_LOCK,
+    PORT_STDLIB_SPIN_LOCK_MALLOC,
+    PORT_STDLIB_SPIN_LOCK_STDIN,
+    PORT_STDLIB_SPIN_LOCK_STDOUT,
+    PORT_STDLIB_SPIN_LOCK_STDERR,
+    PORT_SPIN_LOCK_COUNT
+};
+
+typedef struct
+{
+    uint32_t ulOwnerId;
+    uint32_t ulLock;
+    uint32_t ulRecurCount;
+}SpinLock_t;
+
+void vGetLock(uint32_t ulLockType);
+int vReleaseLock(uint32_t ulLockType);
+uint32_t ulGetCoreId( void );
+void vYieldCore( uint32_t ulCoreId );
+#define portGET_ISR_LOCK()        (vGetLock(PORT_ISR_SPIN_LOCK))
+#define portRELEASE_ISR_LOCK()    ((void)vReleaseLock(PORT_ISR_SPIN_LOCK))
+#define portGET_TASK_LOCK()       (vGetLock(PORT_TASK_SPIN_LOCK))
+#define portRELEASE_TASK_LOCK()   ((void)vReleaseLock(PORT_TASK_SPIN_LOCK))
+
+#define portGET_STDLIB_LOCK(x)       (vGetLock(PORT_STDLIB_SPIN_LOCK_MALLOC + x))
+#define portRELEASE_STDLIB_LOCK(x)   (vReleaseLock(PORT_STDLIB_SPIN_LOCK_MALLOC + x))
 extern void vPortSocfpgaTimerInit( void );
 extern void interrupt_irq_handler( unsigned int ulInterruptID );
 BaseType_t xPortIsInsideInterrupt( void );
+/* SMP */
 #endif /* PORTMACRO_H */

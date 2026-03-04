@@ -11,7 +11,7 @@
 #include "socfpga_cache.h"
 #include "socfpga_sip_handler.h"
 
-#define ERROR_DATA_VALUE    0xFFFFCCCCFFFFCCCCU;
+#define ERROR_DATA_VALUE    0xFFFFCCCCFFFFCCCCU
 #define SYSTEM_BARRIER      __asm__ volatile ( \
         "dmb sy\n"                             \
         "isb\n"                                \
@@ -20,7 +20,7 @@
         : "memory"                             \
         )
 
-static req_payload req_format;
+static iossm_req_payload_t req_format;
 
 /**
  * @brief  read iossm register
@@ -46,14 +46,15 @@ uint32_t iossm_read_register(uint32_t base_addr, uint32_t reg)
  * @return
  * - response - response Data from the iossm
  */
-response_data iossm_send_command(iossm_type const *iossm_data, uint32_t request, uint32_t param)
+iossm_response_data_t iossm_send_command(iossm_type_t const *iossm_data, uint32_t request,
+        uint32_t param)
 {
     uint32_t volatile status = 0U;
     uint32_t volatile cmd_req = 0U;
     uint32_t volatile reg_val = 0U;
 
-    response_data response;
-    req_payload *preq_format;
+    iossm_response_data_t response = {0};
+    iossm_req_payload_t *preq_format;
 
     preq_format = &req_format;
 
@@ -80,7 +81,7 @@ response_data iossm_send_command(iossm_type const *iossm_data, uint32_t request,
     do{
         status = RD_REG32((iossm_data->base_addr + RESP_STAT_REG_OFF));
 
-    } while(!((status & (1U)) == 1U));
+    } while ((status & 1U) == 0U);
 
     reg_val = RD_REG32((iossm_data->base_addr + RESP_STAT_REG_OFF));
     reg_val &= ~(1U << 0U);
@@ -134,21 +135,24 @@ __attribute__((always_inline)) static inline void wait_40us(void) {
  * @return
  * - response - response Data from the iossm
  */
-response_data iossm_err_inject_command(iossm_type const *iossm_data, void *address, uint32_t param)
+iossm_response_data_t iossm_err_inject_command(iossm_type_t const *iossm_data, void *address,
+        uint32_t param)
 {
     uint32_t volatile status = 0U;
     uint32_t volatile cmd_req = 0U;
     uint32_t volatile reg_val = 0U;
 
-    volatile uint64_t *error_addr = (uint64_t *)address;
+    volatile uint64_t *error_addr;
     volatile uint64_t error_data = ERROR_DATA_VALUE;
-    response_data response;
-    req_payload *preq_format;
+    iossm_response_data_t response = {0};
+    iossm_req_payload_t *preq_format;
+
+    error_addr = (volatile uint64_t *)address;
 
     preq_format = &req_format;
 
     /*Setup data*/
-    *error_addr = 0;
+    *error_addr = 0U;
 
     preq_format->opcode = ECC_ERR_INJ;
     /*format the iossm request with command arguments*/
@@ -183,7 +187,7 @@ response_data iossm_err_inject_command(iossm_type const *iossm_data, void *addre
     /*wait until the response is ready*/
     do{
         status = RD_REG32((iossm_data->base_addr + RESP_STAT_REG_OFF));
-    } while(!((status & (1U)) == 1U));
+    } while ((status & 1U) == 0U);
 
     reg_val = RD_REG32((iossm_data->base_addr + RESP_STAT_REG_OFF));
     reg_val &= ~(1U << 0U);
@@ -206,7 +210,7 @@ response_data iossm_err_inject_command(iossm_type const *iossm_data, void *addre
  */
 void iossm_format_command(void)
 {
-    req_payload *formatter;
+    iossm_req_payload_t *formatter;
     formatter = &req_format;
     /*capturing appropriate parameter type and command type
        for each commands

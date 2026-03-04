@@ -59,11 +59,18 @@ void ecc_callback(uint32_t error_type)
     osal_semaphore_post(callback_sem);
 }
 
-void ecc_task()
+void ecc_task(void)
 {
     int ret;
-    uint32_t module_list = 0;
+    uint32_t module_list = 0U;
+
     callback_sem = osal_semaphore_create(NULL);
+    if (callback_sem == NULL)
+    {
+        ERROR("Failed to create semaphore");
+        return;
+    }
+
     PRINT("\nECC sample application");
     PRINT("Initializing ECC module");
     ret = ecc_init();
@@ -76,9 +83,14 @@ void ecc_task()
 
     PRINT("Setting ECC callback");
     ret = ecc_set_callback(ecc_callback);
+    if (ret != 0)
+    {
+        ERROR("Failed to set ECC callback");
+        return;
+    }
     PRINT("ECC callback set");
 
-    module_list = 1 << ECC_MODULE;
+    module_list = (1U << ECC_MODULE);
     PRINT("Enabling ECC module");
     ret = ecc_enable_modules(module_list);
     if (ret != 0)

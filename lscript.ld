@@ -246,14 +246,26 @@ SECTIONS
         . += 0x40000;
         . = ALIGN(64);
         __el2_stack = .;
+        _el21_stack_end = .;
+        . += 0x40000;
+        . = ALIGN(64);
+        __el21_stack = .;
         _el1_stack_end = .;
         . += 0x40000;
         . = ALIGN(64);
         __el1_stack = .;
+        _el11_stack_end = .;
+        . += 0x40000;
+        . = ALIGN(64);
+        __el11_stack = .;
         _el0_stack_end = .;
         . += 0x40000;
         . = ALIGN(64);
         __el0_stack = .;
+        _el01_stack_end = .;
+        . += 0x40000;
+        . = ALIGN(64);
+        __el01_stack = .;
     } > SRAM
 
     _end = .; PROVIDE (end = .);

@@ -45,9 +45,24 @@ message(STATUS "SOC : ${SOC}")
 message(STATUS "Core : ${CORE}")
 message(STATUS "Build Type : ${CMAKE_BUILD_TYPE}")
 
+option(SMP "Enable FreeRTOS SMP" OFF)
+
+if(SMP)
+    message(STATUS "SMP : ON")
+else()
+    message(STATUS "SMP : OFF")
+endif()
+
 include(${CMAKE_CURRENT_SOURCE_DIR}/tools/socfpga_build.cmake)
 
 project(RTOSApp C CXX ASM)
+
+add_custom_target(apply_smp_patch ALL
+    COMMAND ${CMAKE_COMMAND}
+    -DROOT_DIR="${FREERTOS_TOP_DIR}"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/tools/apply_smp_patch.cmake"
+)
+
 add_library(freertos_socfpga STATIC)
 
 # Set compile options based on build type
@@ -58,6 +73,7 @@ else()
 endif()
 
 add_subdirectory(FreeRTOS)
+add_dependencies(freertos_kernel apply_smp_patch)
 add_subdirectory(drivers)
 
 get_property(driver_include_dirs TARGET socfpga_drivers PROPERTY INCLUDE_DIRECTORIES)

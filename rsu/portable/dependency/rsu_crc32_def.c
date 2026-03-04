@@ -14,10 +14,9 @@ unsigned long int calculate_crc32(unsigned long int ulCrc, void *vData,
 {
     char *buf = (char *)vData;
     unsigned int val;
-    unsigned long int crc1, crc2;
     const unsigned long int  *word;
-    unsigned long int val0, val1, val2;
-    unsigned long int last1, last2, i, num;
+    unsigned long int val0;
+    unsigned long int i, num;
 
     if (vData == NULL)
     {

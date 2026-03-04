@@ -126,11 +126,6 @@ void vApplicationStackOverflowHook( TaskHandle_t pxTask, char *pcTaskName )
 
 void vApplicationIdleHook( void )
 {
-#if configENABLE_CONSOLE_UART
-     /* flush pending console writes when system is idle */
-    console_clear_pending();
-#endif
-
     /* vApplicationIdleHook() will only be called if configUSE_IDLE_HOOK is set
        to 1 in FreeRTOSConfig.h.  It will be called on each iteration of the idle
        task.  It is essential that code added to this hook function never attempts

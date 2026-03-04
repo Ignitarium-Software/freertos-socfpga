@@ -12,10 +12,17 @@
 #include "socfpga_console.h"
 #include "socfpga_interrupt.h"
 #include "socfpga_gic_reg.h"
+#include "socfpga_interrupt.h"
+#include "socfpga_cache.h"
+#include "portmacro.h"
 
 #define CORE_0_AFFINITY    0U
+#define CORE_1_AFFINITY    256U
 #define CORE_2_AFFINITY    512U
+#define CORE_3_AFFINITY    768U
 
+uint64_t core_aff;
+uint64_t check_val = 0;
 static void setup_hardware( void )
 {
     /* Initialize the GIC. */
@@ -27,24 +34,41 @@ static void setup_hardware( void )
     #endif
 }
 /*-----------------------------------------------------------*/
-
 void run_hello_world( void * )
 {
-    uint8_t processor_name, core_id;
-    uint64_t affinity = gic_reg_get_cpu_affinity();
-    if( affinity == (uint64_t)CORE_0_AFFINITY )
+    uint8_t processor_name;
+    uint32_t core_aff = gic_reg_get_cpu_affinity()/256;
+    if( core_aff == CORE_0_AFFINITY || core_aff == CORE_1_AFFINITY)
     {
         processor_name = 55;
-        core_id = 0;
     }
-    else if( affinity == (uint64_t)CORE_2_AFFINITY )
+    else if( core_aff == CORE_2_AFFINITY || core_aff == CORE_3_AFFINITY )
     {
         processor_name = 76;
-        core_id = 2;
     }
     do
     {
-        printf( "\r\nhello world from A%d,Core ID = %d\r\n", processor_name, core_id);
+        core_aff = gic_reg_get_cpu_affinity()/256;
+        printf( "\r\nhello world from A%d,Core ID = %d\n", processor_name, core_aff);
+        vTaskDelay( pdMS_TO_TICKS( 500 ) );
+    }while( 1 );
+}
+void run_hello_world_secondary( void * )
+{
+    uint8_t processor_name;
+    uint32_t core_aff = gic_reg_get_cpu_affinity()/256;
+    if( core_aff == CORE_0_AFFINITY || core_aff == CORE_1_AFFINITY)
+    {
+        processor_name = 55;
+    }
+    else if( core_aff == CORE_2_AFFINITY || core_aff == CORE_3_AFFINITY )
+    {
+        processor_name = 76;
+    }
+    do
+    {
+        core_aff = gic_reg_get_cpu_affinity()/256;
+        printf( "\rhello world 2 from A%d,Core ID = %d\n", processor_name, core_aff);
         vTaskDelay( pdMS_TO_TICKS( 500 ) );
     }while( 1 );
 }
@@ -59,6 +83,9 @@ BaseType_t xReturn;
     xReturn = xTaskCreate( run_hello_world, "hello_world", configMINIMAL_STACK_SIZE,
                            NULL, configMAX_PRIORITIES - 1, NULL );
 
+    xReturn = xTaskCreate( run_hello_world_secondary, "hello_world_secondary", configMINIMAL_STACK_SIZE,
+                          NULL, configMAX_PRIORITIES - 1, NULL );
+
     if( xReturn == 1 )
     {
         vTaskStartScheduler();
@@ -71,11 +98,6 @@ BaseType_t xReturn;
 
 void vApplicationIdleHook( void )
 {
-    #if configENABLE_CONSOLE_UART
-        /* flush pending console writes when system is idle */
-        console_clear_pending();
-    #endif
-
     /* vApplicationIdleHook() will only be called if configUSE_IDLE_HOOK is set
      to 1 in FreeRTOSConfig.h.  It will be called on each iteration of the idle
      task.  It is essential that code added to this hook function never attempts

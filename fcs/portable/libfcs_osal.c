@@ -235,6 +235,7 @@ FCS_OSAL_INT fcs_alloc_and_cpy_file_to_mem(const FCS_OSAL_CHAR *filename,
  */
 const FCS_OSAL_CHAR *fcs_fit_strerror(FCS_OSAL_INT err)
 {
+    (void)err;
     return NULL;
 }
 
@@ -248,6 +249,7 @@ const FCS_OSAL_CHAR *fcs_fit_strerror(FCS_OSAL_INT err)
  */
 FCS_OSAL_INT fcs_fit_verify_header(FCS_OSAL_CHAR *fit)
 {
+    (void)fit;
     return 0;
 }
 
@@ -261,6 +263,8 @@ FCS_OSAL_INT fcs_fit_verify_header(FCS_OSAL_CHAR *fit)
  */
 FCS_OSAL_INT fcs_fit_get_noffset(FCS_OSAL_CHAR *fit, const FCS_OSAL_CHAR *path)
 {
+    (void)fit;
+    (void)path;
     return -EIO;
 }
 
@@ -276,6 +280,9 @@ FCS_OSAL_INT fcs_fit_get_noffset(FCS_OSAL_CHAR *fit, const FCS_OSAL_CHAR *path)
 FCS_OSAL_INT fcs_fit_next_node(FCS_OSAL_CHAR *fit, FCS_OSAL_INT offset,
         FCS_OSAL_INT *depth)
 {
+    (void)fit;
+    (void)offset;
+    (void)depth;
     return -EIO;
 }
 
@@ -295,6 +302,10 @@ FCS_OSAL_INT fcs_fit_image_get_data_and_size(FCS_OSAL_CHAR *fit,
         FCS_OSAL_CHAR **data,
         FCS_OSAL_SIZE *size)
 {
+    (void)fit;
+    (void)noffset;
+    (void)data;
+    (void)size;
     return -EIO;
 }
 
@@ -838,8 +849,7 @@ FCS_OSAL_INT fcs_freertos_aes_crypt(struct fcs_cmd_context *ctx)
             ctx->aes.aad_len,
             ctx->aes.aad,
             ctx->aes.tag,
-            ctx->aes.input, ctx->aes.ip_len, ctx->aes.output,
-            *ctx->aes.op_len);
+            ctx->aes.input, ctx->aes.ip_len, ctx->aes.output);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;

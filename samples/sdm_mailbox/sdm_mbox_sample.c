@@ -37,9 +37,9 @@
 #include "socfpga_mbox_client.h"
 
 #define SIP_SMC_HWMON_TEMP       0x420000E8
-#define SIP_SMC_HWMON_VOLT       0x420000E9
-#define VCC_CHANNEL              0x4
-#define READ_PEAK_TEMPERATURE    0x1
+#define SIP_SMC_HWMON_VOLT       0x420000E9U
+#define VCC_CHANNEL              0x4U
+#define READ_PEAK_TEMPERATURE    0x1U
 #define MBOX_TIMEOUT             1000U
 
 osal_semaphore_def_t mbox_sem_mem;
@@ -55,11 +55,22 @@ void mbox_sample_task(void)
     int ret;
     uint64_t channel, smc_fid, resp_data[2] = {0};
     float voltage = 0, temp = 0;
-    sdm_client_handle mbox_handle;
+    sdm_client_handle_t mbox_handle;
     PRINT("Hardware monitor Voltage and Temperature readout sample");
     mbox_sem = osal_semaphore_create(&mbox_sem_mem);
 
-    (void)mbox_init();
+    if (mbox_sem == NULL)
+    {
+        ERROR("Failed to create semaphore");
+        return;
+    }
+
+    ret = mbox_init();
+    if (ret != 0)
+    {
+        ERROR("Failed to initialize mailbox");
+        return;
+    }
 
     /*Open a Client to begin Mailbox operations*/
     mbox_handle = mbox_open_client();

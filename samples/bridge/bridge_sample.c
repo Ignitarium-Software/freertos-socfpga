@@ -69,7 +69,7 @@ static int load_bitstream(const char *rbf)
     uint8_t *rbf_ptr;
     uint32_t file_size = 0U;
 
-    rbf_ptr = mmc_read_rbf(SOURCE_SDMMC, rbf, &file_size);
+    rbf_ptr = mmc_read_file(SOURCE_SDMMC, rbf, &file_size);
     if (rbf_ptr == NULL)
     {
         ERROR("Unable to read bitstream from memory !!!");

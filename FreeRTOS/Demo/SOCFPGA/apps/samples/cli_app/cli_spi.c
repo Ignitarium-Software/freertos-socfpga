@@ -80,6 +80,7 @@ spi_handle_t spi_hdl;
 BaseType_t cmd_spi( char *write_buffer, size_t write_buffer_len,
         const char *command_string )
 {
+    (void)write_buffer;
     (void)write_buffer_len;
     const char *parameter1;
     const char *parameter2;

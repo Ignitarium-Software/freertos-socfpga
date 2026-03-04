@@ -112,7 +112,7 @@ i2c_handle_t i2c_open(uint32_t instance)
     uint8_t reset_status = 0U;
     int32_t status;
 
-    if (!(instance < MAX_I2C_INSTANCES))
+    if (instance >= MAX_I2C_INSTANCES)
     {
         ERROR("Invalid I2C instance.");
         return NULL;
@@ -191,7 +191,7 @@ i2c_handle_t i2c_open(uint32_t instance)
 int32_t i2c_close(i2c_handle_t const hi2c)
 {
 
-    if ((hi2c == NULL) || !(hi2c->is_open))
+    if ((hi2c == NULL) || (hi2c->is_open == false))
     {
         ERROR("Invalid I2C handle or I2C instance not open.");
         return -EINVAL;
@@ -300,7 +300,7 @@ int32_t i2c_ioctl(i2c_handle_t const hi2c, i2c_ioctl_t cmd, void *const pparam)
 
 int32_t i2c_write_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbytes)
 {
-    if ((hi2c == NULL) || (buf == NULL) || (nbytes == 0U) || (!hi2c->is_open))
+    if ((hi2c == NULL) || (buf == NULL) || (nbytes == 0U) || (hi2c->is_open == false))
     {
         ERROR("Invalid parameters");
         return -EINVAL;
@@ -314,7 +314,7 @@ int32_t i2c_write_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbyte
 
     if (osal_mutex_lock(hi2c->mutex, 0xFFFFFFFFU))
     {
-        if (!(hi2c->is_open))
+        if (hi2c->is_open == false)
         {
             if (osal_mutex_unlock(hi2c->mutex) == false)
             {
@@ -373,7 +373,7 @@ int32_t i2c_write_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbyte
 
 int32_t i2c_write_async(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbytes)
 {
-    if ((hi2c == NULL) || (buf == NULL) || (nbytes == 0U) || (!hi2c->is_open))
+    if ((hi2c == NULL) || (buf == NULL) || (nbytes == 0U) || (hi2c->is_open == false))
     {
         ERROR("Invalid parameters");
         return -EINVAL;
@@ -387,7 +387,7 @@ int32_t i2c_write_async(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbyt
 
     if (osal_mutex_lock(hi2c->mutex, 0xFFFFFFFFU))
     {
-        if (!(hi2c->is_open))
+        if (hi2c->is_open == false)
         {
             if (osal_mutex_unlock(hi2c->mutex) == false)
             {
@@ -432,7 +432,7 @@ int32_t i2c_write_async(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbyt
 
 int32_t i2c_read_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbytes)
 {
-    if ((hi2c == NULL) || (buf == NULL) || (nbytes == 0U) || (!hi2c->is_open))
+    if ((hi2c == NULL) || (buf == NULL) || (nbytes == 0U) || (hi2c->is_open == false))
     {
         ERROR("Invalid parameters");
         return -EINVAL;
@@ -446,7 +446,7 @@ int32_t i2c_read_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbytes
 
     if (osal_mutex_lock(hi2c->mutex, 0xFFFFFFFFU))
     {
-        if (!(hi2c->is_open))
+        if (hi2c->is_open == false)
         {
             if (osal_mutex_unlock(hi2c->mutex) == false)
             {
@@ -506,7 +506,7 @@ int32_t i2c_read_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbytes
 
 int32_t i2c_read_async(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbytes)
 {
-    if ((hi2c == NULL) || (buf == NULL) || (nbytes == 0U) || (!hi2c->is_open))
+    if ((hi2c == NULL) || (buf == NULL) || (nbytes == 0U) || (hi2c->is_open == false))
     {
         ERROR("Invalid parameters");
         return -EINVAL;
@@ -520,7 +520,7 @@ int32_t i2c_read_async(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbyte
 
     if (osal_mutex_lock(hi2c->mutex, 0xFFFFFFFFU))
     {
-        if (!(hi2c->is_open))
+        if (hi2c->is_open == false)
         {
             if (osal_mutex_unlock(hi2c->mutex) == false)
             {
@@ -566,12 +566,12 @@ int32_t i2c_read_async(i2c_handle_t const hi2c, uint8_t *const buf, size_t nbyte
 
 int32_t i2c_cancel(i2c_handle_t const hi2c)
 {
-    if ((hi2c == NULL) || !(hi2c->is_open))
+    if ((hi2c == NULL) || (hi2c->is_open == false))
     {
         ERROR("Invalid parameters");
         return -EINVAL;
     }
-    if (!hi2c->is_busy)
+    if (hi2c->is_busy == false)
     {
         ERROR("I2C instance is not busy");
         return -EPERM;

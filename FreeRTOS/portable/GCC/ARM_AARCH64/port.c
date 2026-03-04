@@ -1,7 +1,7 @@
 /*
  * FreeRTOS Kernel V10.5.1
  * Copyright (C) 2021 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
- * Copyright (c) 2025 Altera Corporation.
+ * Copyright (c) 2025-2026 Altera Corporation.
  *
  * SPDX-License-Identifier: MIT
  *
@@ -35,6 +35,8 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
+#include "socfpga_gic_reg.h"
+#include "socfpga_interrupt.h"
 #ifndef configINTERRUPT_CONTROLLER_BASE_ADDRESS
     #error configINTERRUPT_CONTROLLER_BASE_ADDRESS must be defined.  See https: /*www.FreeRTOS.org/Using-FreeRTOS-on-Cortex-A-Embedded-Processors.html */
 #endif
@@ -83,7 +85,6 @@
 
 /* In all GICs 255 can be written to the priority mask register to unmask all
    (but the lowest) interrupt priority. */
-#define portUNMASK_VALUE                 ( 0xFFUL )
 
 /* Tasks are not created with a floating point context, but can be given a
    floating point context after they have been created.  A variable is stored as
@@ -114,14 +115,7 @@
 #define portFPU_REGISTER_WORDS    ( 64 )
 
 /* Macro to unmask all interrupt priorities. */
-#define portCLEAR_INTERRUPT_MASK()                                                          \
-    {                                                                                       \
-        portDISABLE_INTERRUPTS();                                                           \
-        __asm volatile ( "msr ICC_PMR_EL1, %0\n" : : "r" ( portUNMASK_VALUE ) : "memory" ); \
-        __asm volatile ( "DSB SY        \n"                                                 \
-                         "ISB SY        \n");                                               \
-        portENABLE_INTERRUPTS();                                                            \
-    }
+#define portCLEAR_INTERRUPTS() vPortClearInterruptMask( pdFALSE )
 
 /* Hardware specifics used when sanity checking the configuration. */
 /* #define portINTERRUPT_PRIORITY_REGISTER_OFFSET       0x400UL */
@@ -129,8 +123,10 @@
 #define portMAX_8_BIT_VALUE                       ( ( uint8_t ) 0xff )
 #define portBIT_0_SET                             ( ( uint8_t ) 0x01 )
 
+/* Mask for generating SGI */
+/* Only the core values is passed along with the mask as target list */
+#define ICC_SGI_TARGET_MASK                       ( 0xFF00FF00FF0000ULL )
 /*-----------------------------------------------------------*/
-
 /*
  * Starts the first task executing.  This function is necessarily written in
  * assembly code so is implemented in portASM.s.
@@ -144,19 +140,37 @@ extern void vPortRestoreTaskContext( void );
    a non zero value to ensure interrupts don't inadvertently become unmasked before
    the scheduler starts.  As it is stored as part of the task context it will
    automatically be set to 0 when the first task is started. */
-volatile uint64_t ullCriticalNesting = 9999ULL;
+volatile uint64_t ullCriticalNesting[ configNUMBER_OF_CORES ] = {
+    [0 ... ( configNUMBER_OF_CORES - 1 )] = 0
+};
 
 /* Saved as part of the task context.  If ullPortTaskHasFPUContext is non-zero
    then floating point context must be saved and restored for the task. */
-uint64_t ullPortTaskHasFPUContext = pdFALSE;
+uint64_t ullPortTaskHasFPUContext[ configNUMBER_OF_CORES ] = {
+    [0 ... ( configNUMBER_OF_CORES - 1 )] = 0
+};
 
 /* Set to 1 to pend a context switch from an ISR. */
-uint64_t ullPortYieldRequired = pdFALSE;
+uint64_t ullPortYieldRequired[ configNUMBER_OF_CORES ] = {
+    [0 ... ( configNUMBER_OF_CORES - 1 )] = pdFALSE
+};
 
 /* Counts the interrupt nesting depth.  A context switch is only performed if
    if the nesting depth is 0. */
-uint64_t ullPortInterruptNesting = 0;
+uint64_t ullPortInterruptNesting[ configNUMBER_OF_CORES ] = {
+    [0 ... ( configNUMBER_OF_CORES - 1 )] = 0
+};
 
+SpinLock_t xSpinLocks[PORT_SPIN_LOCK_COUNT] =
+{
+    [0 ... ( PORT_SPIN_LOCK_COUNT - 1 )] = { .ulOwnerId = 0xFFFFFFFF }
+};
+
+static BaseType_t xSchedulerStarted[ configNUMBER_OF_CORES ] = { pdFALSE };
+/*
+ * Variable to store the boot core ID. Since no core can have ID 4, it shows
+ * the boot core has not been selected yet.
+ */
 /* Used in the ASM code. */
 __attribute__( ( used ) ) const uint64_t ullICCEOIR = portICCEOIR_END_OF_INTERRUPT_REGISTER_ADDRESS;
 __attribute__( ( used ) ) const uint64_t ullICCIAR = portICCIAR_INTERRUPT_ACKNOWLEDGE_REGISTER_ADDRESS;
@@ -167,7 +181,7 @@ __attribute__( ( used ) ) const uint64_t ullMaxAPIPriorityMask = ( configMAX_API
 
 uint32_t ulRawReadICC_RPR_EL1( void )
 {
-uint32_t rpr;
+uint32_t rpr = 0;
 
     __asm__ __volatile__ ( "mrs %0, ICC_RPR_EL1\n\t" : "=r" ( rpr ) :  : "memory" );
     return rpr;
@@ -176,7 +190,7 @@ uint32_t rpr;
 
 uint32_t ulRawReadICC_BPR1_EL1( void )
 {
-uint32_t bpr;
+uint32_t bpr = 0;
 
     __asm__ __volatile__ ( "mrs %0, ICC_BPR1_EL1\n\t" : "=r" ( bpr ) :  : "memory" );
     return bpr;
@@ -191,7 +205,7 @@ void ulRawWriteICC_PMR_EL1( uint32_t pmr )
 
 uint32_t ulRawReadICC_PMR_EL1( void )
 {
-uint32_t pmr;
+uint32_t pmr = 0;
 
     __asm__ __volatile__ ( "mrs %0, ICC_PMR_EL1\n\t" : "=r" ( pmr ) :  : "memory" );
     return pmr;
@@ -200,7 +214,7 @@ uint32_t pmr;
 
 uint32_t ulRawReadSPsel( void )
 {
-uint32_t ulCurMode;
+uint32_t ulCurMode = 0;
 
     __asm__ __volatile__ ( "mrs %0, SPSel\n\t" : "=r" ( ulCurMode ) : : "memory" );
     ulCurMode &= 0x01;
@@ -216,6 +230,9 @@ StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
                                      TaskFunction_t pxCode,
                                      void * pvParameters )
 {
+    configASSERT( pxTopOfStack != NULL );
+    configASSERT( pxCode != NULL );
+
     /* Setup the initial stack of the task.  The stack is set exactly as
        expected by the portRESTORE_CONTEXT() macro. */
 
@@ -303,7 +320,7 @@ StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
 
         pxTopOfStack--;
         *pxTopOfStack = pdTRUE;
-        ullPortTaskHasFPUContext = pdTRUE;
+        ullPortTaskHasFPUContext[ ulGetCoreId() ] = pdTRUE;
     }
     #else
         /* The task will start with a critical nesting count of 0 as interrupts are
@@ -322,9 +339,71 @@ StackType_t * pxPortInitialiseStack( StackType_t * pxTopOfStack,
 }
 /*-----------------------------------------------------------*/
 
+void vCoreYield( void *pvParam);
+
+BaseType_t xPortStartSchedulerOnCore( void )
+{
+    /* Interrupts are turned off in the CPU itself to ensure a tick does
+       not execute while the scheduler is being started.  Interrupts are
+       automatically turned back on in the CPU when the first task starts
+       executing. */
+    portDISABLE_INTERRUPTS();
+
+    configASSERT( interrupt_register_isr(YIELD_CORE_INTR, vCoreYield,
+            NULL ) == 0 );
+
+    configASSERT( interrupt_enable( YIELD_CORE_INTR,
+            ( configMAX_API_CALL_INTERRUPT_PRIORITY + 1 )) == 0 );
+
+    if( ulGetCoreId() == 0 )
+    {
+        /* Start the timer that generates the tick ISR. */
+        #ifdef configSETUP_TICK_INTERRUPT
+            configSETUP_TICK_INTERRUPT();
+        #else
+            vPortSocfpgaTimerInit();
+        #endif
+    }
+
+    xSchedulerStarted[ ulGetCoreId() ] = pdTRUE;
+    /* Start the first task executing. */
+    vPortRestoreTaskContext();
+
+    /* Should never reach here */
+    return 0;
+}
+/*-----------------------------------------------------------*/
+
+void __attribute__((used)) vCoreEntry(void)
+{
+    /* Initialize the redistributor and register core to core interrupt */
+    /* GIC is initialized before the scheduler starts */
+    interrupt_enable_core_rdis();
+
+    /* Start the scheduler on the core */
+    xPortStartSchedulerOnCore();
+}
+
+static void vCoreInit( uint32_t ulCoreId, void *pvEntryPoint )
+{
+    configASSERT( pvEntryPoint != NULL );
+
+    __asm__ volatile (
+        "LDR    X0,=0xC4000003\n"
+        "MOV    X1, %0\n"
+        "MOV    X2, %1\n"
+        "MOV    X3, XZR\n"
+        "SMC    #0\n"
+        :
+        : "r"(ulCoreId), "r"(pvEntryPoint)
+        : "x0","x1","x2","x3","memory"
+    );
+}
+
+extern void _secondary_boot(void);
 BaseType_t xPortStartScheduler( void )
 {
-uint32_t ulAPSR;
+uint32_t ulAPSR = 0, ulCoreId = 0;
 
     #if ( configASSERT_DEFINED == 1 )
     {
@@ -334,92 +413,101 @@ uint32_t ulAPSR;
     }
     #endif /* configASSERT_DEFINED */
 
+    /* Disable interrupts to prevent interrupts before scheduler starts */
+    portDISABLE_INTERRUPTS();
 
-__asm volatile ( "MRS %0, CurrentEL" : "=r" ( ulAPSR ) );
+    xSpinLocks[0].ulOwnerId = 0xFFFFFFFF;
+    xSpinLocks[1].ulOwnerId = 0xFFFFFFFF;
+    __asm volatile ( "MRS %0, CurrentEL" : "=r" ( ulAPSR ) );
     ulAPSR &= portAPSR_MODE_BITS_MASK;
 
     configASSERT( ulAPSR == portEL1 );
 
-    if( ulAPSR == portEL1 )
+    /* Only continue if the binary point value is set to its lowest possible
+       setting.  See the comments in vPortValidateInterruptPriority() below for
+       more information. */
+    configASSERT( ( ulRawReadICC_BPR1_EL1() & portBINARY_POINT_BITS ) <= portMAX_BINARY_POINT_VALUE );
+
+    /* Initialize the secondary cores */
+    for( int i = 1; i < ( configNUMBER_OF_CORES ); i++ )
     {
-        /* Only continue if the binary point value is set to its lowest possible
-           setting.  See the comments in vPortValidateInterruptPriority() below for
-           more information. */
-        configASSERT( ( ulRawReadICC_BPR1_EL1() & portBINARY_POINT_BITS ) <= portMAX_BINARY_POINT_VALUE );
-
-        if( ( ulRawReadICC_BPR1_EL1() & portBINARY_POINT_BITS ) <= portMAX_BINARY_POINT_VALUE )
-        {
-            /* Interrupts are turned off in the CPU itself to ensure a tick does
-               not execute while the scheduler is being started.  Interrupts are
-               automatically turned back on in the CPU when the first task starts
-               executing. */
-            portDISABLE_INTERRUPTS();
-
-            /* Start the timer that generates the tick ISR. */
-            #ifdef configSETUP_TICK_INTERRUPT
-                configSETUP_TICK_INTERRUPT();
-            #else
-                vPortSocfpgaTimerInit();
-            #endif
-
-            /* Start the first task executing. */
-            vPortRestoreTaskContext();
-        }
+        /* Core ids are in multiples of 256, we start initialising cores
+           that are after the boot core. If the boot core is 2 and the number
+           of cores is 2, cores will start the scheduler in 2->3 order.
+         */
+        vCoreInit( (( i + configBOOT_CORE ) % configMAX_NUM_CORES) * 256, _secondary_boot );
     }
+    xPortStartSchedulerOnCore();
 
+    /* Should never reach here */
     return 0;
 }
 /*-----------------------------------------------------------*/
 
+inline uint32_t ulGetCoreId( void )
+{
+    #if configNUMBER_OF_CORES == 1
+        return 0;
+    #else
+        uint64_t ullCoreAffinity = 0U;
+
+        __asm__ volatile ( "MRS %0, MPIDR_EL1" : "=r" ( ullCoreAffinity ) );
+        ullCoreAffinity = ( ( ullCoreAffinity >> 8 ) & 0xFF );
+        return ( ( ullCoreAffinity + configBOOT_CORE ) % configMAX_NUM_CORES );
+    #endif
+}
 void vPortEndScheduler( void )
 {
     /* Not implemented in ports where there is nothing to return to.
        Artificially force an assert. */
-    configASSERT( ullCriticalNesting == 1000ULL );
+    configASSERT( ullCriticalNesting[ ulGetCoreId() ] == 1000ULL );
 }
 /*-----------------------------------------------------------*/
 
+#if configNUMBER_OF_CORES == 1
+/* Index 0 used to indicate primary core */
 void vPortEnterCritical( void )
 {
     /* Mask interrupts up to the max syscall interrupt priority. */
-    uxPortSetInterruptMask();
+    portDISABLE_INTERRUPTS();
 
     /* Now interrupts are disabled ullCriticalNesting can be accessed
        directly.  Increment ullCriticalNesting to keep a count of how many times
        portENTER_CRITICAL() has been called. */
-    ullCriticalNesting++;
+    ullCriticalNesting[ 0 ]++;
 
     /* This is not the interrupt safe version of the enter critical function so
        assert() if it is being called from an interrupt context.  Only API
        functions that end in "FromISR" can be used in an interrupt.  Only assert if
        the critical nesting count is 1 to protect against recursive calls if the
        assert function also uses a critical section. */
-    if( ullCriticalNesting == 1ULL )
+    if( ullCriticalNesting[ 0 ] == 1ULL )
     {
-        configASSERT( ullPortInterruptNesting == 0 );
+        configASSERT( ullPortInterruptNesting[0] == 0 );
     }
 }
 /*-----------------------------------------------------------*/
 
 void vPortExitCritical( void )
 {
-    if( ullCriticalNesting > portNO_CRITICAL_NESTING )
+    if( ullCriticalNesting[0] > portNO_CRITICAL_NESTING )
     {
         /* Decrement the nesting count as the critical section is being
            exited. */
-        ullCriticalNesting--;
+        ullCriticalNesting[0]--;
 
         /* If the nesting level has reached zero then all interrupt
            priorities must be re-enabled. */
-        if( ullCriticalNesting == portNO_CRITICAL_NESTING )
+        if( ullCriticalNesting[0] == portNO_CRITICAL_NESTING )
         {
             /* Critical nesting has reached zero so all interrupt priorities
                should be unmasked. */
-            portCLEAR_INTERRUPT_MASK();
+            portENABLE_INTERRUPTS();
         }
     }
 }
 /*-----------------------------------------------------------*/
+#endif
 
 void FreeRTOS_Tick_Handler( void )
 {
@@ -445,22 +533,27 @@ void FreeRTOS_Tick_Handler( void )
        so there is no need to save and restore the current mask value.  It is
        necessary to turn off interrupts in the CPU itself while the ICCPMR is being
        updated. */
-    ulRawWriteICC_PMR_EL1( ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) );
-    __asm volatile ( "dsb sy           \n"
-                     "isb sy           \n"::: "memory" );
+    portDISABLE_INTERRUPTS();
 
-    /* Ok to enable interrupts after the interrupt source has been cleared. */
     configCLEAR_TICK_INTERRUPT();
-    portENABLE_INTERRUPTS();
 
     /* Increment the RTOS tick. */
+    #if configNUMBER_OF_CORES > 1
+        /* We are still in the ISR for the Tick interrupt */
+        /* The single core function already performs check to see
+         * if its in ISR */
+        BaseType_t xInterruptStatus;
+        xInterruptStatus = portENTER_CRITICAL_FROM_ISR();
+    #endif
     if( xTaskIncrementTick() != pdFALSE )
     {
-        ullPortYieldRequired = pdTRUE;
+        ullPortYieldRequired[ ulGetCoreId() ] = pdTRUE;
     }
-
+    #if configNUMBER_OF_CORES > 1
+        portEXIT_CRITICAL_FROM_ISR( xInterruptStatus );
+    #endif
     /* Ensure all interrupt priorities are active again. */
-    portCLEAR_INTERRUPT_MASK();
+    portENABLE_INTERRUPTS();
 }
 /*-----------------------------------------------------------*/
 
@@ -468,46 +561,10 @@ void vPortTaskUsesFPU( void )
 {
     /* A task is registering the fact that it needs an FPU context.  Set the
        FPU flag (which is saved as part of the task context). */
-    ullPortTaskHasFPUContext = pdTRUE;
+    ullPortTaskHasFPUContext[ ulGetCoreId() ] = pdTRUE;
 
     /* Consider initialising the FPSR here - but probably not necessary in
        AArch64. */
-}
-/*-----------------------------------------------------------*/
-
-void vPortClearInterruptMask( UBaseType_t uxNewMaskValue )
-{
-    if( uxNewMaskValue == pdFALSE )
-    {
-        portCLEAR_INTERRUPT_MASK();
-    }
-}
-/*-----------------------------------------------------------*/
-
-UBaseType_t uxPortSetInterruptMask( void )
-{
-uint32_t ulReturn;
-
-    /* Interrupt in the CPU must be turned off while the ICCPMR is being
-       updated. */
-    portDISABLE_INTERRUPTS();
-
-    if( ulRawReadICC_PMR_EL1() == ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) )
-    {
-        /* Interrupts were already masked. */
-        ulReturn = pdTRUE;
-    }
-    else
-    {
-        ulReturn = pdFALSE;
-        ulRawWriteICC_PMR_EL1( ( uint32_t ) ( configMAX_API_CALL_INTERRUPT_PRIORITY << portPRIORITY_SHIFT ) );
-        __asm volatile ( "dsb sy        \n"
-                         "isb sy        \n"::: "memory" );
-    }
-
-    portENABLE_INTERRUPTS();
-
-    return ulReturn;
 }
 /*-----------------------------------------------------------*/
 
@@ -551,28 +608,119 @@ uint32_t ulReturn;
 /* vApplicationIRQHandler() is just a normal C function. */
 void vApplicationIRQHandler( uint32_t ulICCIAR )
 {
+    /* Nesting count should always be 0, else an interrupt pre-empted
+       a critical section, which should never happen. */
+    configASSERT( ullCriticalNesting[ulGetCoreId()] == 0 );
     interrupt_irq_handler( ulICCIAR );
 }
 /*-----------------------------------------------------------*/
-
+/* Callback function for core to core interrupt */
+/*-----------------------------------------------------------*/
 
 BaseType_t xPortIsInsideInterrupt( void )
 {
-BaseType_t xReturn;
+BaseType_t xReturn = pdFALSE;
 
     /*Check the stackpointer in use to determine the mode
      * 0 - EL1t
      * 1 - EL1h
      * */
-    if( ulRawReadSPsel() )
+    if( xSchedulerStarted[ ulGetCoreId() ] == pdTRUE )
     {
-        xReturn = pdTRUE;
+        if( ulRawReadSPsel() != 0U )
+        {
+            xReturn = pdTRUE;
+        }
+        else
+        {
+            xReturn = pdFALSE;
+        }
     }
-    else
-    {
-        xReturn = pdFALSE;
-    }
-
     return xReturn;
 }
 /*-----------------------------------------------------------*/
+
+inline void vGetLock( uint32_t ulLockType )
+{
+    SpinLock_t *pxLock = &xSpinLocks[ulLockType];
+    uint32_t ulCoreId = ulGetCoreId();
+
+    if (pxLock->ulOwnerId == ulCoreId)
+    {
+        pxLock->ulRecurCount++;
+        return;
+    }
+
+    /* 1. Set w2 with new lock value
+       2. Wait for lock to be 0
+       3. Write new value for lock
+       4. Check if write successful
+       5. Repeat from 2 if any step failed */
+
+    __asm__ __volatile__(
+    "  sevl                \n"
+    "  mov   w2, #1        \n"
+    "1:wfe                 \n"
+    "  ldaxr w1, [%0]      \n"
+    "  cbnz  w1, 1b        \n"
+    "  stxr  w3, w2, [%0]  \n"
+    "  cbnz  w3, 1b        \n"
+    "  dmb   sy            \n"
+        :
+        : "r" (&pxLock->ulLock)
+        : "w1", "w2", "w3", "memory"
+    );
+
+    pxLock->ulOwnerId = ulCoreId;
+    pxLock->ulRecurCount = 1;
+}
+
+inline int vReleaseLock( uint32_t ulLockType )
+{
+    int ret = 1;
+    SpinLock_t *pxLock = &xSpinLocks[ulLockType];
+    uint32_t ulCoreId = ulGetCoreId();
+
+    if (pxLock->ulOwnerId != ulCoreId)
+    {
+        return ret;
+    }
+    if (--pxLock->ulRecurCount > 0)
+    {
+        return pxLock->ulLock;
+    }
+
+    /*
+     * The lock is owned and not a recursive unlock, reset the
+     * owner id before releasing the lock
+     */
+    pxLock->ulOwnerId = 0xFFFFFFFF;
+
+    ret = 0;
+    __asm__ __volatile__(
+        "dmb sy\n"
+        "stlr wzr, [%0]\n"
+        :
+        : "r" (&pxLock->ulLock)
+        : "memory");
+    return ret;
+}
+
+inline void vYieldCore( uint32_t ulCoreId )
+{
+    /*
+     * Actual core affinity is in multiples of 256, so core id 1 will
+     * actually have 256 as its internal id.
+     */
+    uint64_t ulSgiTarget = ((ulCoreId * 256) << 8) | ( 1 << 0 ) ;
+
+    /*Send SGI to target core, signalling it to yield */
+    __asm__ volatile ("MSR ICC_SGI1R_EL1, %0\n\t" :: "r"(ulSgiTarget) : "memory");
+    __asm__ volatile ("ISB SY\n\t");
+}
+
+void vCoreYield( void *pvParam)
+{
+    ( void ) pvParam;
+    ullPortYieldRequired[ ulGetCoreId() ] = pdTRUE;
+}

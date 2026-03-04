@@ -24,7 +24,9 @@
  *
  */
 
+#ifndef __ASSEMBLER__
 #include <stddef.h>
+#endif
 
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
@@ -61,6 +63,7 @@
 #define configUSE_NEWLIB_REENTRANT              0
 #define configENABLE_BACKWARD_COMPATIBILITY     0
 #define configNUM_THREAD_LOCAL_STORAGE_POINTERS 5
+#define configUSE_SB_COMPLETED_CALLBACK         1
 
 /* Used memory allocation (heap_x.c) */
 #define configFRTOS_MEMORY_SCHEME               4
@@ -92,7 +95,14 @@
 #define configTIMER_TASK_STACK_DEPTH            (configMINIMAL_STACK_SIZE * 2)
 
 /* Define to trap errors during development. */
-#define configASSERT(x) if(( x) == 0) {taskDISABLE_INTERRUPTS(); for (;;){}}
+#define configASSERT(x) \
+    do { \
+        if ((x) == 0) { \
+            taskDISABLE_INTERRUPTS(); \
+            for (;;) { \
+            } \
+        } \
+    } while (0)
 
 /* Optional functions - most linkers will remove unused functions anyway. */
 #define INCLUDE_vTaskPrioritySet                1
@@ -152,6 +162,8 @@ standard names. */
 #define configMAX_API_CALL_INTERRUPT_PRIORITY                 9
 
 #define configENABLE_CONSOLE_UART 1
+#define configCONSOLE_MAKE_FLUSH_TASK 1
+#define configCONSOLE_FLUSH_TASK_PRIORITY tskIDLE_PRIORITY
 
 #if configENABLE_CONSOLE_UART == 1
 #define configCONSOLE_UART_ID               0
@@ -184,6 +196,22 @@ standard names. */
 #define configSTART_REGISTER_TESTS                1
 #define configSTART_DELETE_SELF_TESTS             1
 
+#if defined(SMP) && (SMP != 0)
+#define configNUMBER_OF_CORES                   2
+#define configUSE_CORE_AFFINITY                 1
+#else
+#define configNUMBER_OF_CORES                   1
+#define configUSE_CORE_AFFINITY                 0
+#endif
+#define configUSE_PASSIVE_IDLE_HOOK             0
+#define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
+#define configMAX_NUM_CORES                     4
+#define configRUN_MULTIPLE_PRIORITIES           1
+#define configUSE_CORE_AFFINITY                 0
+#ifndef configBOOT_CORE
+    #define configBOOT_CORE                     0
+#endif
+
 /* Hook function related definitions. */
 #define configUSE_IDLE_HOOK                     1
 #define configUSE_TICK_HOOK                     1
@@ -193,14 +221,16 @@ standard names. */
 
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES     3
 
-#define configPRINTF( X )                         printf X
-#define configCOMMAND_INT_MAX_OUTPUT_SIZE         200
+#define configPRINTF( X )                         ( printf X )
+#define configCOMMAND_INT_MAX_OUTPUT_SIZE         ( 200 )
 
 /* Required for TCP stack TODO : Need to find right place */
 #define ipTRUE_BOOL         ( 1 == 1 )
 #define ipFALSE_BOOL        ( 1 == 2 )
 
+#ifndef __ASSEMBLER__
 extern void * pvPortMallocCoherent( size_t xWantedSize );
 extern void * pvPortAlignedAlloc( size_t xAlignemnt, size_t xWantedSize );
+#endif
 
 #endif /* FREERTOS_CONFIG_H */
