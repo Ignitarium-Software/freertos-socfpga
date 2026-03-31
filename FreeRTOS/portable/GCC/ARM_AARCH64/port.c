@@ -708,11 +708,17 @@ inline int vReleaseLock( uint32_t ulLockType )
 
 inline void vYieldCore( uint32_t ulCoreId )
 {
+    uint64_t ulSgiTarget = 0;
     /*
      * Actual core affinity is in multiples of 256, so core id 1 will
-     * actually have 256 as its internal id.
+     * actually have 256 as its internal id. FreeRTOS expects core ids
+     * to start from zero, the following logic changes the core ID from
+     * FreeRTOS mapping to the internally used core ID.
+     * eg: Boot core may have internal ID as 2, but FreeRTOS expects it
+     * as 0.
      */
-    uint64_t ulSgiTarget = ((ulCoreId * 256) << 8) | ( 1 << 0 ) ;
+    ulCoreId = ( ( ulCoreId + configBOOT_CORE ) % configMAX_NUM_CORES );
+    ulSgiTarget = ((ulCoreId * 256) << 8) | ( 1 << 0 ) ;
 
     /*Send SGI to target core, signalling it to yield */
     __asm__ volatile ("MSR ICC_SGI1R_EL1, %0\n\t" :: "r"(ulSgiTarget) : "memory");
