@@ -93,8 +93,8 @@ static RSU_OSAL_INT plat_mbox_send_rsu_update(RSU_OSAL_U64 addr)
     {
         return -1;
     }
-    rsu_update_args[0] = addr | 0XFFFFFFFF;
-    rsu_update_args[1] = (addr >> 32) | 0xFFFFFFFF;
+    rsu_update_args[0] = addr & 0XFFFFFFFF;
+    rsu_update_args[1] = (addr >> 32) & 0xFFFFFFFF;
     cache_force_write_back(rsu_update_args, RSU_UPDATE_ARG_SIZE);
     ret = mbox_send_command(rsu_client, 0x5C, rsu_update_args,
             RSU_UPDATE_ARG_SIZE,
