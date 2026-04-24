@@ -17,12 +17,10 @@
 #include "portmacro.h"
 
 #define CORE_0_AFFINITY    0U
-#define CORE_1_AFFINITY    256U
-#define CORE_2_AFFINITY    512U
-#define CORE_3_AFFINITY    768U
+#define CORE_1_AFFINITY    1U
+#define CORE_2_AFFINITY    2U
+#define CORE_3_AFFINITY    3U
 
-uint64_t core_aff;
-uint64_t check_val = 0;
 static void setup_hardware( void )
 {
     /* Initialize the GIC. */
@@ -34,41 +32,50 @@ static void setup_hardware( void )
     #endif
 }
 /*-----------------------------------------------------------*/
+
 void run_hello_world( void * )
 {
-    uint8_t processor_name;
-    uint32_t core_aff = gic_reg_get_cpu_affinity()/256;
-    if( core_aff == CORE_0_AFFINITY || core_aff == CORE_1_AFFINITY)
-    {
-        processor_name = 55;
-    }
-    else if( core_aff == CORE_2_AFFINITY || core_aff == CORE_3_AFFINITY )
-    {
-        processor_name = 76;
-    }
+uint8_t processor_name = 0;
+uint32_t core_aff = 0;
+
+    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
     do
     {
-        core_aff = gic_reg_get_cpu_affinity()/256;
-        printf( "\r\nhello world from A%d,Core ID = %d\n", processor_name, core_aff);
+        core_aff = gic_reg_get_cpu_affinity() / 256;
+        if( core_aff == CORE_0_AFFINITY || core_aff == CORE_1_AFFINITY )
+        {
+            processor_name = 55;
+        }
+        else if( core_aff == CORE_2_AFFINITY || core_aff == CORE_3_AFFINITY )
+        {
+            processor_name = 76;
+        }
+
+        printf( "\n\rhello world from A%d,Core ID = %d\n\r", processor_name, core_aff );
         vTaskDelay( pdMS_TO_TICKS( 500 ) );
     }while( 1 );
 }
+/*-----------------------------------------------------------*/
+
 void run_hello_world_secondary( void * )
 {
-    uint8_t processor_name;
-    uint32_t core_aff = gic_reg_get_cpu_affinity()/256;
-    if( core_aff == CORE_0_AFFINITY || core_aff == CORE_1_AFFINITY)
-    {
-        processor_name = 55;
-    }
-    else if( core_aff == CORE_2_AFFINITY || core_aff == CORE_3_AFFINITY )
-    {
-        processor_name = 76;
-    }
+uint8_t processor_name = 0;
+uint32_t core_aff = 0;
+
+    vTaskDelay( pdMS_TO_TICKS( 1000 ) );
     do
     {
-        core_aff = gic_reg_get_cpu_affinity()/256;
-        printf( "\rhello world 2 from A%d,Core ID = %d\n", processor_name, core_aff);
+        core_aff = gic_reg_get_cpu_affinity() / 256;
+        if( ( core_aff == CORE_0_AFFINITY ) || ( core_aff == CORE_1_AFFINITY ) )
+        {
+            processor_name = 55;
+        }
+        else if( ( core_aff == CORE_2_AFFINITY ) || ( core_aff == CORE_3_AFFINITY ) )
+        {
+            processor_name = 76;
+        }
+
+        printf( "\n\rhello world 2 from A%d,Core ID = %d\n\r", processor_name, core_aff );
         vTaskDelay( pdMS_TO_TICKS( 500 ) );
     }while( 1 );
 }
