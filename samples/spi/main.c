@@ -14,9 +14,19 @@
 #include "socfpga_console.h"
 #include "socfpga_smmu.h"
 
+/* Select which SPI sample task(s) to run. */
+#define SPI_SAMPLE_ENABLE_PIO       1
+#define SPI_SAMPLE_ENABLE_DMA       0
+#define SPI_SAMPLE_ENABLE_SLAVE     0
+#define SPI_SAMPLE_ENABLE_SLAVE_DMA 0
+
+void spi_task(void);
+void spi_dma_task(void);
+void spi_slave_task(void);
+void spi_slave_dma_task(void);
+
 #define TASK_PRIORITY    (configMAX_PRIORITIES - 2)
 void run_samples( void *arg );
-void spi_task();
 
 void vApplicationTickHook( void )
 {
@@ -61,7 +71,18 @@ void run_samples( void *arg )
 {
     (void) arg;
 
+#if SPI_SAMPLE_ENABLE_PIO
     spi_task();
+#endif
+#if SPI_SAMPLE_ENABLE_DMA
+    spi_dma_task();
+#endif
+#if SPI_SAMPLE_ENABLE_SLAVE
+    spi_slave_task();
+#endif
+#if SPI_SAMPLE_ENABLE_SLAVE_DMA
+    spi_slave_dma_task();
+#endif
 
     vTaskSuspend(NULL);
 }

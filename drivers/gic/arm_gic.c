@@ -9,9 +9,9 @@
 #include <string.h>
 #include "osal_log.h"
 #include "osal.h"
-#include "socfpga_gic_registers.h"
+#include "arm_gic_registers.h"
 #include "socfpga_interrupt.h"
-#include "socfpga_gic.h"
+#include "arm_gic.h"
 
 #define INTERRUPT_DCTRL_ENG0      (1U << 0U)
 #define INTERRUPT_DCTRL_ENG1NS    (1U << 1U)

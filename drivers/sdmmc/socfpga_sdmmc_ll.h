@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -152,7 +152,7 @@ int32_t sdmmc_reset_configs(void);
 void sdmmc_init_configs(uint32_t emmc_bus_width, uint32_t def_speed);
 
 /**
- * @brief Resets the sdmmc peripherel.
+ * @brief Resets the sdmmc peripheral.
  *
  * @return
  *  - CTRL_CONFIG_PASS , on reset success.

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -60,9 +60,9 @@ osal_semaphore_t done_sem;
  * @brief DMA done callback function
  */
 
-void dma_done_callback(dma_handle_t dma_handle)
+void dma_done_callback(void *data)
 {
-    (void)dma_handle;
+    (void)data;
     osal_semaphore_post(done_sem);
 }
 
@@ -71,7 +71,7 @@ void dma_task(void)
 
     done_sem = osal_semaphore_create(&done_sem_mem);
     dma_config_t dma1channel1config;
-    dma_xfer_cfg_t blk_trnsfr_list[NUM_BLK] = { 0 };
+    dma_xfer_cfg_t blk_xfer_list[NUM_BLK] = { 0 };
     BaseType_t ret_val;
     dma_handle_t dma_handle;
 
@@ -95,13 +95,13 @@ void dma_task(void)
 
     for (int i = 0; i < NUM_BLK; i++)
     {
-        blk_trnsfr_list[i].src = (uint64_t)(tx_buf[i]);
-        blk_trnsfr_list[i].dst = (uint64_t)(rx_buf[i]);
-        blk_trnsfr_list[i].blk_size = TRANSFER_SIZE * 2;
+        blk_xfer_list[i].src = (uint64_t)(tx_buf[i]);
+        blk_xfer_list[i].dst = (uint64_t)(rx_buf[i]);
+        blk_xfer_list[i].blk_size = TRANSFER_SIZE * 2;
         /* Update next block transfer address if current block is not last in the list */
         if (i < (NUM_BLK - 1))
         {
-            blk_trnsfr_list[i].next_trnsfr_cfg = &blk_trnsfr_list[i + 1];
+            blk_xfer_list[i].next_xfer_cfg = &blk_xfer_list[i + 1];
         }
     }
 
@@ -127,8 +127,9 @@ void dma_task(void)
         ERROR("Exiting DMA sample application");
         return;
     }
-    /* source and destination width is set to DMA_ID_XFER_WIDTH8 (8 bytes) */
-    ret_val = dma_setup_transfer(dma_handle, &blk_trnsfr_list[0], NUM_BLK, DMA_ID_XFER_WIDTH8, DMA_ID_XFER_WIDTH8);
+    /* source and destination width is set to DMA_XFER_WIDTH8 (8 bytes) */
+    ret_val = dma_setup_transfer(dma_handle, &blk_xfer_list[0], NUM_BLK,
+            DMA_XFER_WIDTH8, DMA_XFER_WIDTH8);
     if (ret_val != 0)
     {
         ERROR("Setting up DMA channel failed");

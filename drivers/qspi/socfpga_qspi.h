@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -115,8 +115,6 @@ typedef struct qpsi_descriptor
  * @brief Enable the interrupt.
  *
  * @param[in] type Flag to indicate the interrupts to be enabled
- *
- * @return none
  */
 void qspi_enable_int(uint32_t type);
 
@@ -124,8 +122,6 @@ void qspi_enable_int(uint32_t type);
  * @brief Disable interrupts.
  *
  * @param[in] mask for interrupts to be disabled
- *
- * @return none
  */
 void qspi_disable_int(uint32_t mask);
 
@@ -156,9 +152,11 @@ int32_t qspi_read_sfdp(uint32_t address, uint8_t size, uint32_t *data);
 int32_t qspi_send_flash_readcmd(uint8_t cmd, uint8_t numbytes, uint32_t *data);
 
 /**
- * @brief Erase 4K sectors.
+ * @brief Send a flash write or erase command.
  *
- * @param[in] cmd Command to be sent to the flash device.
+ * @param[in] cmd      Command to be sent to the flash device.
+ * @param[in] numbytes Number of bytes to write.
+ * @param[in] data    Pointer to the data buffer.
  *
  * @return
  * - QSPI_ERROR: if the operation is not successful.
@@ -190,8 +188,6 @@ int32_t qspi_send_flashcmd(uint32_t cmd);
 
 /**
  * @brief Verify if the write operation is completed in the flash chip.
- *
- * @param none
  *
  * @return
  * - QSPI_ERROR: if the operation is not successful.
@@ -317,8 +313,6 @@ int32_t qspi_init(qspi_descriptor_t *qspi_handle);
 /**
  * @brief Wait for erase and program.
  *
- * @param none
- *
  * @return
  * - QSPI_ERROR: if the erase or program failed.
  * - QSPI_OK:    if the erase or program is successful.
@@ -339,9 +333,9 @@ int32_t qspi_erase(uint32_t address);
 /**
  * @brief Deinitialize the flash handle.
  *
- * @param[in] flash_handle Flash handle to be deinitialized.
- *
- * @return none
+ * @return
+ * - QSPI_ERROR: if the deinitialization fails.
+ * - QSPI_OK:    if the deinitialization is successful.
  */
 int32_t qspi_deinit(void);
 
@@ -361,10 +355,7 @@ int32_t qspi_set_callback(qspi_descriptor_t *qspi_handle, qspi_callback_t
 /**
  * @brief QSPI isr function.
  *
- * @param[in] pointer to flash handle
- *
- * return
- *      NONE
+ * @param[in] pparam Pointer to flash handle.
  */
 void qspi_isr(void *pparam);
 

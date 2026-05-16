@@ -1,5 +1,12 @@
 
 add_library(freertos_kernel_port OBJECT)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(freertos_kernel_port PRIVATE ${DEFAULT_C_FLAGS_DEBUG})
+else()
+    target_compile_options(freertos_kernel_port PRIVATE ${DEFAULT_C_FLAGS_RELEASE})
+endif()
+
 add_dependencies(freertos_kernel_port apply_smp_patch)
 target_sources(freertos_kernel_port
     PRIVATE
@@ -8,15 +15,17 @@ target_sources(freertos_kernel_port
     ${CMAKE_CURRENT_SOURCE_DIR}/port.c
     ${CMAKE_CURRENT_SOURCE_DIR}/portSocfpga.c
     ${CMAKE_CURRENT_SOURCE_DIR}/heap_3_extra.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/portStandardLib.c
+    # portStandardLib.c is intentionally omitted here: it calls console driver
+    # functions (console_read/fill/signal) that live in socfpga_drivers, which is
+    # archived into libfreertos_socfpga.a. Placing it in freertos_kernel_port
+    # causes it to land in libfreertos_kernel.a, which is linked after
+    # libfreertos_socfpga.a. The GNU linker's single left-to-right pass over
+    # archives cannot resolve back-references, so those symbols are undefined at
+    # link time. The file is compiled as part of freertos_socfpga instead, where
+    # it shares an archive with socfpga_console.c and the dependency is satisfied
+    # within a single archive pass.
     ${FREERTOS_TOP_DIR}/FreeRTOS/Demo/SOCFPGA/startup/cpu_init.S
     ${FREERTOS_TOP_DIR}/FreeRTOS/Demo/SOCFPGA/startup/setup_pagetable.c
-    ${FREERTOS_TOP_DIR}/drivers/console/socfpga_console.c
-    ${FREERTOS_TOP_DIR}/drivers/uart/socfpga_uart.c
-    ${FREERTOS_TOP_DIR}/drivers/uart/socfpga_uart_ll.c
-    ${FREERTOS_TOP_DIR}/drivers/sdm_mailbox/socfpga_sip_handler.c
-    ${FREERTOS_TOP_DIR}/drivers/reset_mngr/socfpga_rst_mngr.c
-    ${FREERTOS_TOP_DIR}/drivers/clk_mngr/socfpga_clk_mngr.c
 )
 
 set_property(SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/portASM.S

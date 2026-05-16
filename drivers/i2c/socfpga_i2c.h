@@ -1,7 +1,7 @@
 /*
  * Common IO - basic V1.0.0
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * Copyright (C) 2025 Altera Corporation
+ * Copyright (C) 2025-2026 Altera Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -35,7 +35,12 @@
  */
 
 #include <errno.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include "socfpga_defines.h"
+#include "socfpga_dma.h"
+#include "socfpga_i2c_reg.h"
 /**
  * @defgroup i2c I2C
  * @ingroup drivers
@@ -78,17 +83,41 @@
 /**
  * The speeds supported by I2C bus.
  */
-#define I2C_STANDARD_MODE_BPS     (100000U)        /*!< Standard mode bits per second. */
-#define I2C_FAST_MODE_BPS         (400000U)        /*!< Fast mode bits per second. */
-#define I2C_FAST_MODE_PLUS_BPS    (1000000U)       /*!< Fast plus mode bits per second. */
-#define I2C_HIGH_SPEED_BPS        (3400000U)       /*!< High speed mode bits per second. */
+#define I2C_STANDARD_MODE_BPS     100000U        /*!< Standard mode bits per second. */
+#define I2C_FAST_MODE_BPS         400000U        /*!< Fast mode bits per second. */
+#define I2C_FAST_MODE_PLUS_BPS    1000000U       /*!< Fast plus mode bits per second. */
+#define I2C_HIGH_SPEED_BPS        3400000U       /*!< High speed mode bits per second. */
+
+/**
+ * The DMA LLI params used by I2C driver
+ *
+ */
+#ifndef MAX_I2C_BLK_XFERS
+#define MAX_I2C_BLK_XFERS   8U
+#endif
+
+#ifndef I2C_DMA_XFER_BLK_SIZE
+#define I2C_DMA_XFER_BLK_SIZE   512U
+#endif
+
+/*
+ * DMA DATA_CMD helpers for 32-bit command/data words.
+ * Callers must build these words for DMA-mode transfers.
+ */
+#define I2C_DMA_CMD_FLAG_STOP    (1U << I2C_DATA_CMD_STOP_POS)
+#define I2C_DMA_CMD_FLAG_READ    (1U << I2C_DATA_CMD_CMD_POS)
+#define I2C_DMA_CMD_FLAG_RESTART (1U << I2C_DATA_CMD_RESTART_POS)
+#define I2C_DMA_CMD_FLAG_FIRST   (1U << I2C_DATA_CMD_FIRST_DATA_BYTE_POS)
+#define I2C_DMA_CMD_DATA(data)   ((uint32_t)(data) & I2C_DATA_CMD_DAT_MASK)
+#define I2C_DMA_CMD_WORD(data, flags) (I2C_DMA_CMD_DATA(data) | (flags))
+
 /**
  * @}
  */
 /* end of group i2c_macros */
 
 /**
- * @brief Data tranfer status.
+ * @brief Data transfer status.
  * Used while invoking the callback function.
  * @ingroup i2c_enums
  */
@@ -96,7 +125,7 @@ typedef enum
 {
     I2C_SUCCESS = 0, /*!< I2C operation completed successfully. */
     I2C_OP_FAIL, /*!< I2C driver returns error during last operation. */
-    I2C_NACK = -EIO, /*!< Unexpected NACK is caught. */
+    I2C_NACK, /*!< Unexpected NACK is caught. */
 } i2c_op_status_t;
 
 /**
@@ -105,11 +134,30 @@ typedef enum
  */
 /**
  * @brief I2C bus configuration
+ *
+ * clk: bus frequency in Hz.
  */
 typedef struct i2c_config
 {
-    uint32_t clk; /*!< Bus frequency/baud rate */
+    uint32_t clk;
 } i2c_config_t;
+
+/**
+ * @brief I2C DMA channel configuration
+ *
+ * tx_instance/tx_channel/tx_prio: DMA settings for TX.
+ * rx_instance/rx_channel/rx_prio: DMA settings for RX.
+ */
+typedef struct i2c_dma_config
+{
+    uint32_t tx_instance;
+    uint32_t tx_channel;
+    uint8_t tx_prio;
+    uint32_t rx_instance;
+    uint32_t rx_channel;
+    uint8_t rx_prio;
+} i2c_dma_config_t;
+
 /**
  * @}
  */
@@ -130,6 +178,14 @@ typedef enum
     I2C_GET_BUS_STATE, /*!< Get the current I2C bus status. Returns eI2CBusIdle or eI2CBusy */
     I2C_GET_TX_NBYTES, /*!< Get the number of bytes sent in write operation. */
     I2C_GET_RX_NBYTES, /*!< Get the number of bytes received in read operation. */
+    I2C_OPEN_DMA,
+    I2C_ENABLE_WDMA,
+    I2C_ENABLE_RDMA,
+    I2C_DISABLE_WDMA,
+    I2C_DISABLE_RDMA,
+    I2C_CLOSE_DMA,
+    I2C_SLAVE_INIT,   /*!< Configure and enable slave mode using #i2c_slave_config_t. */
+    I2C_SLAVE_DEINIT, /*!< Disable slave mode and restore master defaults. */
 } i2c_ioctl_t;
 
 /**
@@ -142,6 +198,37 @@ typedef enum
     I2C_MODE_FAST = 2, /*!< Fast or fast plus speed mode */
     I2C_MODE_HS = 3, /*!< High speed mode */
 } i2c_mode_t;
+
+/**
+ * @brief I2C operations
+ * @ingroup i2c_enums
+ */
+typedef enum
+{
+    I2C_READ = 1,
+    I2C_WRITE = 2,
+} i2c_operation_t;
+
+/**
+ * @brief I2C controller role.
+ * @ingroup i2c_enums
+ */
+typedef enum
+{
+    I2C_ROLE_MASTER = 0,
+    I2C_ROLE_SLAVE = 1,
+} i2c_role_t;
+
+/**
+ * @brief I2C bus status
+ * @ingroup i2c_enums
+ */
+typedef enum
+{
+    I2C_BUS_IDLE = 0,
+    I2C_BUS_BUSY,
+} i2c_bus_status_t;
+
 
 /**
  * @brief The I2C descriptor type defined in the source file.
@@ -173,6 +260,91 @@ typedef struct i2c_descriptor *i2c_handle_t;
  *
  */
 typedef void (*i2c_callback_t)(i2c_op_status_t op_status, void *param);
+
+/**
+ * @brief Callback invoked when an external master initiates a write to this slave.
+ *
+ * Called from ISR context before any data bytes are received. Allows the
+ * application to prepare its receive buffer.
+ *
+ * @param[in] hi2c  I2C handle.
+ * @param[in] param User context.
+ */
+typedef void (*i2c_slave_write_requested_cb_t)(i2c_handle_t hi2c, void *param);
+
+/**
+ * @brief Callback invoked for each byte received from an external master.
+ *
+ * Called from ISR context once per received byte.
+ *
+ * @param[in] hi2c  I2C handle.
+ * @param[in] data  The received byte.
+ * @param[in] param User context.
+ */
+typedef void (*i2c_slave_write_received_cb_t)(i2c_handle_t hi2c, uint8_t data,
+        void *param);
+
+/**
+ * @brief Callback invoked when an external master requests to read from this slave.
+ *
+ * Called from ISR context on the first RD_REQ of a read transaction. The
+ * callback must fill @p data with the first byte to transmit.
+ *
+ * @param[in]  hi2c  I2C handle.
+ * @param[out] data  Pointer to store the byte to transmit.
+ * @param[in]  param User context.
+ */
+typedef void (*i2c_slave_read_requested_cb_t)(i2c_handle_t hi2c, uint8_t *data,
+        void *param);
+
+/**
+ * @brief Callback invoked after each byte has been transmitted to an external master.
+ *
+ * Called from ISR context after each byte write. Allows the application to
+ * advance its transmit pointer. @p data may be filled with the next byte
+ * as a hint, but the driver will call @c read_requested_cb again on the
+ * next RD_REQ.
+ *
+ * @param[in]  hi2c  I2C handle.
+ * @param[out] data  Pointer to optionally store the next byte.
+ * @param[in]  param User context.
+ */
+typedef void (*i2c_slave_read_processed_cb_t)(i2c_handle_t hi2c, uint8_t *data,
+        void *param);
+
+/**
+ * @brief Callback invoked when a STOP condition is detected on the bus.
+ *
+ * Called from ISR context. Signals the end of the current transaction.
+ *
+ * @param[in] hi2c  I2C handle.
+ * @param[in] param User context.
+ */
+typedef void (*i2c_slave_stop_cb_t)(i2c_handle_t hi2c, void *param);
+
+/**
+ * @brief I2C slave mode configuration.
+ *
+ * Callbacks run in ISR context and follow a byte-oriented model.
+ * Set @c rx_tl / @c tx_tl to 0 for per-byte ISR handling (default).
+ */
+typedef struct i2c_slave_config
+{
+    uint16_t slave_address;
+    bool is_10bit_addr;
+    bool stop_det_ifaddressed;
+    bool ack_general_call;
+    uint8_t tx_default_byte;
+    uint8_t rx_tl;  /*!< RX FIFO threshold (I2C_RX_TL); 0 = fire after every byte. */
+    uint8_t tx_tl;  /*!< TX FIFO threshold (I2C_TX_TL); 0 = fire when TX FIFO is empty. */
+
+    i2c_slave_write_requested_cb_t  write_requested_cb;
+    i2c_slave_write_received_cb_t   write_received_cb;
+    i2c_slave_read_requested_cb_t   read_requested_cb;
+    i2c_slave_read_processed_cb_t   read_processed_cb;
+    i2c_slave_stop_cb_t             stop_cb;
+    void *cb_usercontext;
+} i2c_slave_config_t;
 
 /**
  * @brief Initiates and reserves an I2C instance as master.
@@ -223,7 +395,7 @@ void i2c_set_callback(i2c_handle_t const hi2c, i2c_callback_t callback, void *pa
  * @warning None of other read or write functions shall be called while a transfer is in progress.
  *
  * @param[in]  hi2c   The I2C handle returned in open() call.
- * @param[out] buf    The receive buffer to read the data into. It must stay allocated by the caller.
+ * @param[out] buf    The receive buffer to read the data into.
  * @param[in]  nbytes The number of bytes to read.
  *
  * @return
@@ -241,7 +413,7 @@ void i2c_set_callback(i2c_handle_t const hi2c, i2c_callback_t callback, void *pa
  * - -EBUSY: if the bus is busy which means there is an ongoing transaction.
  *
  */
-int32_t i2c_read_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t
+int32_t i2c_read_sync(i2c_handle_t const hi2c, void *const buf, size_t
         nbytes);
 
 /**
@@ -255,8 +427,19 @@ int32_t i2c_read_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t
  * @warning None of other read or write functions shall be called while a transfer is in progress.
  *
  * @param[in] hi2c   The I2C handle returned in open() call.
- * @param[in] buf    The transmit buffer containing the data to be written. It must stay allocated until this function returns.
- * @param[in] nbytes The number of bytes to write.
+ * @param[in] buf    Transmit buffer containing the data/commands to be written.
+ *
+ *                   Interrupt mode (DMA disabled):
+ *                   - @p buf is a byte buffer (uint8_t *) sized to @p nbytes bytes.
+ *
+ *                   DMA mode (WDMA enabled):
+ *                   - @p buf is a 32-bit word buffer (uint32_t *) sized to
+ *                     @p nbytes words.
+ *                   - Each word is a pre-built IC_DATA_CMD value (data + STOP/READ/
+ *                     RESTART/FIRST flags as required). See `I2C_DMA_CMD_*` helpers.
+ *
+ * @param[in] nbytes In interrupt mode this is a byte count; in DMA write mode this
+ *                   is a word count.
  *
  * @return
  * - 0: on success (all the requested bytes have been written)
@@ -272,83 +455,88 @@ int32_t i2c_read_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t
  *     - there is some unknown driver error
  * - -EBUSY: if another transfer is in progress
  */
-int32_t i2c_write_sync(i2c_handle_t const hi2c, uint8_t *const buf, size_t
+int32_t i2c_write_sync(i2c_handle_t const hi2c, void *const buf, size_t
         nbytes);
 
 /**
- * @brief Starts the I2C master read operation in asynchronous mode.
+ * @brief Starts an I2C read operation in asynchronous mode.
  *
- * This function attempts to read certain number of bytes to a pre-allocated buffer, in asynchronous way.
- * It returns immediately when the operation is started and the status can be check by calling i2c_ioctl.
- * Once the operation completes, successful or not, the user callback will be invoked.
+ * Works for both master and slave roles.
  *
- * Partial read might happen, e.g. slave device unable to receive more data.
- * And the number of bytes that have been actually read can be obtained by calling i2c_ioctl.
+ * Master: reads @p nbytes from the configured target slave device using
+ * DMA (if enabled) or interrupt mode. Returns immediately; completion is
+ * signalled via the callback set with i2c_set_callback().
  *
- * @note Usually, the address of register needs to be written before calling this function.
- * @note In order to get notification when the asynchronous call is completed, i2c_set_callback must be called prior to this.
+ * Slave: pre-arms RX DMA to receive @p nbytes from an external master.
+ * DMA must be open and RX-enabled before calling. Completion is signalled
+ * via the callback set with i2c_set_callback(). The slave must call this
+ * before the master begins its write transaction.
  *
- * @warning Prior to this function, slave address must be already configured.
- * @warning None of other read or write functions shall be called while a transfer is in progress.
+ * @note i2c_set_callback() must be called before this function.
+ * @note For master role, slave address must already be configured.
  *
  * @param[in]  hi2c   The I2C handle returned in open() call.
- * @param[out] buf    The receive buffer to read the data into. Allocated by the caller.
+ * @param[out] buf    The receive buffer to read the data into.
  * @param[in]  nbytes The number of bytes to read.
  *
  * @return
  * - 0: on success
- * - -EINVAL: if
- *     - hi2c is NULL
- *     - hi2c is not opened yet
- *     - buf is NULL
- *     - nbytes is 0
- * - -ENXIO: if slave address is not set yet
- * - -EIO:   if
- *     - there is some unknown driver error
- * - -EBUSY: if another transfer is in progress
+ * - -EINVAL: if parameters are invalid, or slave role with DMA not ready
+ * - -ENXIO:  if master role and slave address is not set
+ * - -EIO:    on DMA or transfer error
+ * - -EBUSY:  if another transfer is in progress
  */
-int32_t i2c_read_async(i2c_handle_t const hi2c, uint8_t *const buf, size_t
+int32_t i2c_read_async(i2c_handle_t const hi2c, void *const buf, size_t
         nbytes);
 
 /**
- * @brief Starts the I2C master write operation in asynchronous mode.
+ * @brief Starts an I2C write operation in asynchronous mode.
  *
- * This function attempts to write certain number of bytes from a pre-allocated buffer to a slave device, in asynchronous way.
- * It returns immediately when the operation is started and the status can be check by calling i2c_ioctl.
- * Once the operation completes, successful or not, the user callback will be invoked.
+ * Works for both master and slave roles. @p buf is always a byte buffer;
+ * the driver expands bytes to the required IC_DATA_CMD word format internally.
  *
- * Partial write might happen, e.g. slave device unable to receive more data.
- * And the number of bytes that have been actually written can be obtained by calling i2c_ioctl.
+ * Master: writes @p nbytes to the configured target slave device using
+ * DMA (if enabled) or interrupt mode. Returns immediately; completion is
+ * signalled via the callback set with i2c_set_callback().
  *
- * @note In order to get notification when the asynchronous call is completed, i2c_set_callback must be called prior to this.
+ * Slave: pre-arms TX DMA with @p nbytes to transmit when an external master
+ * reads from this slave. DMA must be open and TX-enabled before calling.
+ * Completion is signalled via the callback set with i2c_set_callback().
+ * The slave must call this before the master begins its read transaction.
  *
- * @warning Prior to this function, slave address must be already configured.
- * @warning None of other read or write functions shall be called during this function.
+ * @note i2c_set_callback() must be called before this function.
+ * @note For master role, slave address must already be configured.
  *
  * @param[in] hi2c   The I2C handle returned in open() call.
- * @param[in] buf    The transmit buffer containing the data to be written. It must stay allocated before this function returns.
- * @param[in] nbytes The number of bytes to write.
+ * @param[in] buf    Transmit buffer containing the data/commands to write.
+ *
+ *                 Interrupt mode (DMA disabled):
+ *                 - @p buf is a byte buffer (uint8_t *) sized to @p nbytes bytes.
+ *
+ *                 DMA mode (WDMA enabled):
+ *                 - @p buf is a 32-bit word buffer (uint32_t *) sized to
+ *                   @p nbytes words.
+ *                 - Each word is a pre-built IC_DATA_CMD value (data + STOP/READ/
+ *                   RESTART/FIRST flags as required). See `I2C_DMA_CMD_*` helpers.
+ *
+ * @param[in] nbytes In interrupt mode this is a byte count; in DMA write mode this
+ *                   is a word count.
  *
  * @return
  * - 0: on success
- * - -EINVAL: if
- *     - hi2c is NULL
- *     - hi2c is not opened yet
- *     - buf is NULL
- *     - nbytes is 0
- * - -ENXIO: if slave address is not set yet
- * - -EIO:   if
- *     - there is some unknown driver error
- * - -EBUSY: if another transfer is in progress
+ * - -EINVAL: if parameters are invalid, or slave role with DMA not ready
+ * - -ENXIO:  if master role and slave address is not set
+ * - -EIO:    on DMA or transfer error
+ * - -EBUSY:  if another transfer is in progress
  */
-int32_t i2c_write_async(i2c_handle_t const hi2c, uint8_t *const buf, size_t
+int32_t i2c_write_async(i2c_handle_t const hi2c, void *const buf, size_t
         nbytes);
 
 /**
  * @brief Configures the I2C master with user configuration.
  *
  * @param[in] hi2c       The I2C handle returned in open() call.
- * @param[in] cmd        Should be one of I2C_Ioctl_Request_t.
+ * @param[in] cmd        Should be one of i2c_ioctl_t.
  * @param[in,out] pparam The configuration values for the IOCTL request.
  *
  * @note SetMasterConfig is expected only called once at beginning.
@@ -372,6 +560,9 @@ int32_t i2c_write_async(i2c_handle_t const hi2c, uint8_t *const buf, size_t
  * @note I2C_GET_RX_NBYTES returns the number of read bytes in last transaction.
  * This is supposed to be called in the caller task or application callback, right after last transaction completes.
  * This request expects 2 bytes buffer (uint16_t).
+ *
+ * @note I2C_SLAVE_INIT configures and enables slave mode using #i2c_slave_config_t.
+ * @note I2C_SLAVE_DEINIT disables slave mode and restores master defaults.
  *
  * @return
  * - 0: on success

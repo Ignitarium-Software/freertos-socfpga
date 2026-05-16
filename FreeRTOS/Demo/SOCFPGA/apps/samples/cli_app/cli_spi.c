@@ -378,7 +378,7 @@ int32_t eeprom_enable_write()
     uint8_t cmd = EEPROM_WR_ENABLE;
     int32_t ret;
 
-    ret = spi_transfer_sync(spi_hdl, &cmd, NULL, 1);
+    ret = spi_xfer_sync(spi_hdl, &cmd, NULL, 1);
     if (ret != 0)
     {
         return ret;
@@ -401,7 +401,7 @@ int32_t eeprom_write( uint8_t *buf, size_t size, uint16_t mem_add )
     }
 
     rx_count = size + 3;
-    ret = spi_transfer_sync(spi_hdl, cmd, NULL,  rx_count);
+    ret = spi_xfer_sync(spi_hdl, cmd, NULL,  rx_count);
     if (ret != 0)
     {
         return ret;
@@ -423,7 +423,7 @@ int32_t eeprom_read( uint8_t *buf, size_t size, uint16_t mem_add )
         cmd[i + 3] = i + 0x0F;
     }
 
-    ret = spi_transfer_sync(spi_hdl, cmd, buf, (size + 3));
+    ret = spi_xfer_sync(spi_hdl, cmd, buf, (size + 3));
     if (ret != 0)
     {
         return ret;

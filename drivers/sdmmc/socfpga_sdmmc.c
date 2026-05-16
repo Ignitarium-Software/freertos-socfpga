@@ -564,6 +564,11 @@ int32_t sdmmc_init_card(uint64_t *ptr_sec_num)
 
     sdmmc_descriptor.semaphore_xfer = osal_semaphore_create(&osal_def_xfer);
     sdmmc_descriptor.semaphore_cmd = osal_semaphore_create(&osal_def_cmd);
+    if ((sdmmc_descriptor.semaphore_xfer == NULL) ||
+                (sdmmc_descriptor.semaphore_cmd == NULL))
+    {
+        return -ENOMEM;
+    }
     intr_ret = interrupt_register_isr(SDMMC_IRQ, sdmmc_irq_handler, NULL);
     if (intr_ret != ERR_OK)
     {

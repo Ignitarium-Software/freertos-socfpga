@@ -9,13 +9,18 @@
 #ifndef __SOCFPGA_SPI_REG_H__
 #define __SOCFPGA_SPI_REG_H__
 
-#define GET_BASE_ADDRESS(instance)    ((uint32_t)(0x10DA4000U + \
-    (instance * 0x1000U)))
+#define GET_BASE_ADDR_MASTER(instance)       ((uint32_t)(0x10DA4000U + \
+    ((instance) * 0x1000U)))
+#define GET_BASE_ADDR_SLAVE(instance)        ((uint32_t)(0x10DA2000U + \
+    ((instance) * 0x1000U)))
+#define GET_BASE_ADDR(instance)              GET_BASE_ADDR_MASTER(instance)
 
 #define CLK_PERPLL                                  0x10D1007CU
 #define CLK_PERPLL_EN                               (0x0U + CLK_PERPLL)
 #define CLK_SPIM0_SHIFT                             9U
 #define CLK_SPIM1_SHIFT                             11U
+#define CLK_SPIS0_SHIFT                             12U
+#define CLK_SPIS1_SHIFT                             13U
 
 #define RST_PER0                                    0x10D11024U
 #define RST_SPI_SHIFT                               17U
@@ -156,6 +161,8 @@
 #define SPI_CTRLR0_CFS_POS                          12U
 #define SPI_CTRLR0_SRL_MASK                         0x00000800U
 #define SPI_CTRLR0_SRL_POS                          11U
+#define SPI_CTRLR0_SLV_OE_MASK                      0x00000400U
+#define SPI_CTRLR0_SLV_OE_POS                       10U
 #define SPI_CTRLR0_TMOD_MASK                        0x00000300U
 #define SPI_CTRLR0_TMOD_POS                         8U
 #define SPI_CTRLR0_SCPOL_MASK                       0x00000080U

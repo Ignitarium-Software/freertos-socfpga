@@ -6,8 +6,8 @@
 * GIC v3 register definitions
 */
 
-#ifndef __SOCFPGA_GIC_REGISTERS_H__
-#define __SOCFPGA_GIC_REGISTERS_H__
+#ifndef __ARM_GIC_REGISTERS_H__
+#define __ARM_GIC_REGISTERS_H__
 
 #include <stdint.h>
 
@@ -138,4 +138,4 @@ struct gic_v3_rdist_if
   #endif
 };
 
-#endif /* __SOCFPGA_GIC_REGISTERS_H__ */
+#endif /* __ARM_GIC_REGISTERS_H__ */

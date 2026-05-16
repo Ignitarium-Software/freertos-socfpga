@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -60,8 +60,8 @@
 #define M25Q_DUMMY_CYCLES      0U
 #define M25Q_QSPI_MODE         4U
 
-/*@brief The SFDP header structure
- *
+/**
+ * @brief The SFDP header structure
  */
 struct sfdp_header
 {
@@ -73,8 +73,8 @@ struct sfdp_header
 };
 
 
-/*@brief The SFDP parameter header structure
- *
+/**
+ * @brief The SFDP parameter header structure
  */
 struct sfdp_param_header
 {
@@ -86,8 +86,8 @@ struct sfdp_param_header
     uint32_t reserved;
 };
 
-/*@brief The SFDP parameter table structure
- *
+/**
+ * @brief The SFDP parameter table structure
  */
 struct sfdp_param_table
 {
@@ -105,8 +105,8 @@ struct sfdp_param_table
 
 };
 
-/*@brief The Flash Adapter structure
- *
+/**
+ * @brief The Flash Adapter structure
  */
 struct sfdp_object
 {
@@ -115,13 +115,13 @@ struct sfdp_object
     struct sfdp_param_table param_table[MAX_PARAM_TABLES];
 };
 
-/*@brief Function pointer to the SFDP parsing
- *       logic
+/**
+ * @brief Function pointer to the SFDP parsing logic
  */
 typedef int (*parse_sfpd_pf)(void *pqspi, struct sfdp_object *sfdp);
 
-/*@brief The Flash Adapter structure
- *
+/**
+ * @brief The Flash Adapter structure
  */
 typedef struct flash_adapter
 {
@@ -134,6 +134,7 @@ typedef struct flash_adapter
  * @brief Read the SFDP parameters for the Micron M25Q flash chip.
  *
  * @param[in] phandle Void pointer which has to be type casted to flash handle.
+ * @param[in,out] sfdp SFDP object to populate.
  *
  * @return
  * - FLASH_OK:    if the operation is successful.

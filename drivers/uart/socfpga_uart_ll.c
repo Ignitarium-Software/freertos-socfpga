@@ -9,6 +9,8 @@
 #include <string.h>
 #include "osal.h"
 
+#define UART_POLL_TIMEOUT_COUNT    100000U
+
 #include "socfpga_uart_ll.h"
 #include "socfpga_defines.h"
 #include "socfpga_uart_reg.h"
@@ -428,12 +430,23 @@ void uart_disable_interrupt(uint32_t base_address, uart_interrupt_id_t id)
 /**
  * @brief Polling write to UART Tx
  */
-void uart_tx_polling(uint32_t base_address, uint8_t *const buf,
+uint32_t uart_tx_polling(uint32_t base_address, uint8_t *const buf,
         uint32_t nbytes)
 {
-    for(uint32_t len = 0; len < nbytes; len++)
+    uint32_t len;
+    uint32_t timeout;
+
+    for(len = 0; len < nbytes; len++)
     {
-        while (!(RD_REG32(base_address + UART_LSR) & UART_LSR_THRE_MASK));
+        timeout = UART_POLL_TIMEOUT_COUNT;
+        while (!(RD_REG32(base_address + UART_LSR) & UART_LSR_THRE_MASK))
+        {
+            if (--timeout == 0U)
+            {
+                return len;
+            }
+        }
         WR_REG32(base_address + UART_THR, buf[len]);
     }
+    return len;
 }

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -32,7 +32,7 @@
  *
  * @return
  * - 0:         if the freeze operation is successful
- * - ETIMEDOUT: if the freeze operation gets timed out
+ * - -ETIMEDOUT: if the freeze operation gets timed out
  */
 int do_freeze_pr_region(void);
 
@@ -42,7 +42,7 @@ int do_freeze_pr_region(void);
  *
  * @return
  * - 0:         if the unfreeze operation is successful,
- * - ETIMEDOUT: if the unfreeze operation gets timed out
+ * - -ETIMEDOUT: if the unfreeze operation gets timed out
  */
 int do_unfreeze_pr_region(void);
 

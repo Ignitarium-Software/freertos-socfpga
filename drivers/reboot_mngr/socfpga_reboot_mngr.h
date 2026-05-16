@@ -1,9 +1,9 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
- * HAL driver implementation for i2c
+ * Header file for reboot manager HAL driver
  */
 
 
@@ -79,10 +79,7 @@ typedef void (*reboot_callback_t)(void *param);
 int32_t reboot_mngr_set_callback(reboot_callback_t callback, uint32_t event);
 
 /**
- * @brief Reboot function
- *
- * Sets the callback function that is invoked before initiating cold
- * /warm reboot.
+ * @brief Initiate a warm or cold reboot.
  *
  * @param[in] event Callback for warm/cold reboot.
  *

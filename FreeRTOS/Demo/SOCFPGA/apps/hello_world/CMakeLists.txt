@@ -12,9 +12,14 @@ set(FREERTOS_TCPIP n)
 set(FREERTOS_LIBRSU n)
 set(FREERTOS_LIBFCS n)
 
+get_filename_component(FREERTOS_PATH
+    "${CMAKE_SOURCE_DIR}/../../../../.."
+    ABSOLUTE
+)
+
 FetchContent_Declare(
     freertos
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/../../../../..
+    SOURCE_DIR ${FREERTOS_PATH}
 )
 
 # Get the freertos repo

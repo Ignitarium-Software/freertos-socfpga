@@ -60,7 +60,7 @@ uint16_t read_phy_reg(uint32_t base_address, uint32_t phy_address, uint8_t phy_r
         {
             return 0U;
         }
-        for (uint32_t i = 0U; i < max_cnt; i++)
+        for (volatile uint32_t i = 0U; i < max_cnt; i++)
         {
         }
         count++;
@@ -102,7 +102,7 @@ uint16_t read_phy_reg(uint32_t base_address, uint32_t phy_address, uint8_t phy_r
     WR_REG32(base_address + XGMAC_MDIO_SINGLE_COMMAND_CONTROL_DATA, data);
 
     /* wait for some time */
-    for (int i = 0; i < 10000; i++)
+    for (volatile int i = 0; i < 10000; i++)
     {
     }
 
@@ -114,7 +114,7 @@ uint16_t read_phy_reg(uint32_t base_address, uint32_t phy_address, uint8_t phy_r
         {
             return 0U;
         }
-        for (uint32_t i = 0U; i < max_cnt; i++)
+        for (volatile uint32_t i = 0U; i < max_cnt; i++)
         {
         }
         count++;
@@ -148,7 +148,7 @@ int8_t write_phy_reg(uint32_t base_address, uint32_t phy_address, uint8_t phy_re
         {
             return -1;
         }
-        for (uint32_t i = 0U; i < max_cnt; i++)
+        for (volatile uint32_t i = 0U; i < max_cnt; i++)
         {
         }
         count++;
@@ -190,7 +190,7 @@ int8_t write_phy_reg(uint32_t base_address, uint32_t phy_address, uint8_t phy_re
     /* Write masked data to MDIO cmd cntrl data register */
     WR_REG32(base_address + XGMAC_MDIO_SINGLE_COMMAND_CONTROL_DATA, data);
 
-    for (uint32_t i = 0U; i < (max_cnt * 10000U); i++)
+    for (volatile uint32_t i = 0U; i < (max_cnt * 10000U); i++)
     {
     }
     count = 0U;
@@ -200,7 +200,7 @@ int8_t write_phy_reg(uint32_t base_address, uint32_t phy_address, uint8_t phy_re
         {
             return -1;
         }
-        for (uint32_t i = 0U; i < max_cnt; i++)
+        for (volatile uint32_t i = 0U; i < max_cnt; i++)
         {
         }
         count++;

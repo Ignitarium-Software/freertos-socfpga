@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -22,8 +22,8 @@
  * @brief APIs for the SoC FPGA FCS driver.
  * @details
  * The FCS driver is implemented as a HAL for libfcs. This driver is not to be
- * used by the applicaion but rather is used by the libfcs library. It provide
- * user with a high-level API for cryptographic operations. The libfcs uses a
+ * used by the application but rather is used by the libfcs library. It provides
+ * the user with a high-level API for cryptographic operations. The libfcs uses a
  * wrapper layer to interact with the FCS driver, which in turn communicates
  * with SIP_SVC subsystem and provides the response to the corresponding
  * cryptographic operation.
@@ -332,7 +332,7 @@ int run_fcs_send_certificate(char *cert_data, uint32_t cert_size,
  * @param[in] value The value to set for the counter.
  * @param[in] test  Test flag for the operation.
 
- * * @return
+ * @return
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
@@ -440,7 +440,7 @@ int run_fcs_sdos_decrypt(char *uuid, uint32_t context_id, char *src_data,
  * @param[in] key_id          Key ID
  * @param[in] step_type       Extract and expand or just expand
  * @param[in] mac_mode        SHA-256, SHA-384, SHA-512
- * @param[in] input_buffer    Buffer containg input data
+ * @param[in] input_buffer    Buffer containing input data
  * @param[in] output_key_size Length of passed key object
  * @param[out] hkdf_status    Status of the HKDF request
  *
@@ -732,7 +732,7 @@ int run_fcs_ecdh_request(char *uuid, uint32_t key_id, uint32_t context_id,
 int run_fcs_qspi_open(void);
 
 /**
- * @brief Close the exculsive access to the QSPI interface
+ * @brief Close the exclusive access to the QSPI interface
  *
  * This function closes the QSPI interface.
  *

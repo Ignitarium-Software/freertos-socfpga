@@ -207,7 +207,6 @@ standard names. */
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 #define configMAX_NUM_CORES                     4
 #define configRUN_MULTIPLE_PRIORITIES           1
-#define configUSE_CORE_AFFINITY                 0
 #ifndef configBOOT_CORE
     #define configBOOT_CORE                     0
 #endif

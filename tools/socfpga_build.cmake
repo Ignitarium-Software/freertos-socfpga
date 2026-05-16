@@ -1,4 +1,8 @@
 
+if(WIN32)
+    include(${CMAKE_CURRENT_LIST_DIR}/win_helper.cmake)
+endif()
+
 if(NOT ATF_SOURCE)
     set(ATF_SOURCE ${FREERTOS_TOP_DIR}/tools/ATF CACHE STRING "Path to ATF git repository")
 endif()
@@ -79,16 +83,82 @@ endif()
 
 message(STATUS "ATF Log Level : ${ATF_LOG_LEVEL}")
 
+set(ATF_BUILD_CMD_QSPI_PRE
+    make -C ${ATF_BUILD_COPY_DIR}
+    CROSS_COMPILE=${CC_PREFIX}
+    PLAT=${ATF_PLAT} SOCFPGA_BOOT_SOURCE_QSPI=1 bl2 bl31
+    PRELOADED_BL33_BASE=0x82000000
+    LOG_LEVEL=${ATF_LOG_LEVEL} DEBUG=${ATF_DEBUG_FLAG}
+    -j${CMAKE_BUILD_PARALLEL_LEVEL}
+)
+set(ATF_BUILD_CMD_SD_PRE
+    make -C ${ATF_BUILD_COPY_DIR}
+    CROSS_COMPILE=${CC_PREFIX}
+    PLAT=${ATF_PLAT} bl2 bl31
+    PRELOADED_BL33_BASE=0x82000000
+    LOG_LEVEL=${ATF_LOG_LEVEL} DEBUG=${ATF_DEBUG_FLAG}
+    -j${CMAKE_BUILD_PARALLEL_LEVEL}
+)
+set(ATF_CLEAN_CMD_PRE
+    make -C ${ATF_BUILD_COPY_DIR}
+    PLAT=${ATF_PLAT}
+    clean
+)
+set(ATF_BUILD_FIPTOOL_CMD_PRE
+    make -C ${ATF_BUILD_COPY_DIR}
+    fiptool
+)
+
+if(WIN32)
+    string(JOIN " " ATF_BUILD_CMD_QSPI_PRE_STR ${ATF_BUILD_CMD_QSPI_PRE})
+    string(JOIN " " ATF_BUILD_CMD_SD_PRE_STR ${ATF_BUILD_CMD_SD_PRE})
+    string(JOIN " " ATF_CLEAN_CMD_PRE_STR ${ATF_CLEAN_CMD_PRE})
+    string(JOIN " " ATF_BUILD_FIPTOOL_CMD_PRE_STR ${ATF_BUILD_FIPTOOL_CMD_PRE})
+    set(ATF_BUILD_SCRIPT_QSPI "${CMAKE_BINARY_DIR}/build_atf_qspi.sh")
+    set(ATF_BUILD_SCRIPT_SD "${CMAKE_BINARY_DIR}/build_atf_sd.sh")
+    set(ATF_BUILD_FIPTOOL_SCRIPT "${CMAKE_BINARY_DIR}/build_atf_fiptool.sh")
+    file(WRITE ${ATF_BUILD_SCRIPT_QSPI}
+"#!/usr/bin/bash
+export PATH=/opt/aarch-cc/bin:\$PATH
+${ATF_CLEAN_CMD_PRE_STR}
+${ATF_BUILD_CMD_QSPI_PRE_STR}
+"
+    )
+    file(WRITE ${ATF_BUILD_SCRIPT_SD}
+"#!/usr/bin/bash
+export PATH=/opt/aarch-cc/bin:\$PATH
+${ATF_CLEAN_CMD_PRE_STR}
+${ATF_BUILD_CMD_SD_PRE_STR}
+"
+    )
+    file(WRITE ${ATF_BUILD_FIPTOOL_SCRIPT}
+"#!/usr/bin/bash
+export PATH=/opt/aarch-cc/bin:\$PATH
+${ATF_BUILD_FIPTOOL_CMD_PRE_STR}
+"
+    )
+
+    format_mingw_command("${ATF_BUILD_SCRIPT_QSPI}" ATF_BUILD_CMD_QSPI)
+    format_mingw_command("${ATF_BUILD_SCRIPT_SD}" ATF_BUILD_CMD_SD)
+    format_mingw_command("${ATF_BUILD_FIPTOOL_SCRIPT}" ATF_BUILD_FIPTOOL_CMD)
+
+    set(ATF_CLEAN_CMD
+        ${CMAKE_COMMAND} -E
+        echo
+        "Building ATF"
+    )
+else()
+    set(ATF_BUILD_CMD_QSPI ${ATF_BUILD_CMD_QSPI_PRE})
+    set(ATF_BUILD_CMD_SD ${ATF_BUILD_CMD_SD_PRE})
+    set(ATF_CLEAN_CMD ${ATF_CLEAN_CMD_PRE})
+    set(ATF_BUILD_FIPTOOL_CMD ${ATF_BUILD_FIPTOOL_CMD_PRE})
+endif()
+
 # Add custom target to build ATF
 add_custom_target(
     atf-bl2-bl31-qspi
-    COMMAND make -C ${ATF_BUILD_COPY_DIR} PLAT=${ATF_PLAT} clean
-    COMMAND make -C ${ATF_BUILD_COPY_DIR}
-        CROSS_COMPILE=${CC_PREFIX}
-        PLAT=${ATF_PLAT} SOCFPGA_BOOT_SOURCE_QSPI=1 bl2 bl31
-        PRELOADED_BL33_BASE=0x82000000
-        LOG_LEVEL=${ATF_LOG_LEVEL} DEBUG=${ATF_DEBUG_FLAG}
-        -j${CMAKE_BUILD_PARALLEL_LEVEL}
+    COMMAND ${ATF_CLEAN_CMD}
+    COMMAND ${ATF_BUILD_CMD_QSPI}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${QSPI_ARTIFACTS_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ATF_BUILD_DIR}/bl31.bin ${QSPI_ARTIFACTS_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ATF_BUILD_DIR}/bl2.bin ${QSPI_ARTIFACTS_DIR}
@@ -109,13 +179,8 @@ add_custom_target(
         -DINPUT_FILE="${ATF_PLAT_DEF_FILE}"
         -DTYPE="SD"
         -P "${_mmc_patch_script}"
-    COMMAND make -C ${ATF_BUILD_COPY_DIR} PLAT=${ATF_PLAT} clean
-    COMMAND make -C ${ATF_BUILD_COPY_DIR}
-        CROSS_COMPILE=${CC_PREFIX}
-        PLAT=${ATF_PLAT} bl2 bl31
-        PRELOADED_BL33_BASE=0x82000000
-        LOG_LEVEL=${ATF_LOG_LEVEL} DEBUG=${ATF_DEBUG_FLAG}
-        -j${CMAKE_BUILD_PARALLEL_LEVEL}
+    COMMAND ${ATF_CLEAN_CMD}
+    COMMAND ${ATF_BUILD_CMD_SD}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${SD_ARTIFACTS_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ATF_BUILD_DIR}/bl31.bin ${SD_ARTIFACTS_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ATF_BUILD_DIR}/bl2.bin ${SD_ARTIFACTS_DIR}
@@ -130,13 +195,8 @@ add_custom_target(
         -DINPUT_FILE="${ATF_PLAT_DEF_FILE}"
         -DTYPE="EMMC"
         -P "${_mmc_patch_script}"
-    COMMAND make -C ${ATF_BUILD_COPY_DIR} PLAT=${ATF_PLAT} clean
-    COMMAND make -C ${ATF_BUILD_COPY_DIR}
-        CROSS_COMPILE=${CC_PREFIX}
-        PLAT=${ATF_PLAT} bl2 bl31
-        PRELOADED_BL33_BASE=0x82000000
-        LOG_LEVEL=${ATF_LOG_LEVEL} DEBUG=${ATF_DEBUG_FLAG}
-        -j${CMAKE_BUILD_PARALLEL_LEVEL}
+    COMMAND ${ATF_CLEAN_CMD}
+    COMMAND ${ATF_BUILD_CMD_SD}
     COMMAND ${CMAKE_COMMAND} -E make_directory "${EMMC_ARTIFACTS_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ATF_BUILD_DIR}/bl31.bin ${EMMC_ARTIFACTS_DIR}
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ATF_BUILD_DIR}/bl2.bin ${EMMC_ARTIFACTS_DIR}
@@ -146,7 +206,7 @@ add_custom_target(
 )
 
 add_custom_command(
-    COMMAND make -C ${ATF_BUILD_COPY_DIR} fiptool
+    COMMAND ${ATF_BUILD_FIPTOOL_CMD}
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${ATF_BUILD_COPY_DIR}/tools/fiptool/fiptool ${CMAKE_BINARY_DIR}/fiptool
     OUTPUT ${CMAKE_BINARY_DIR}/fiptool
     VERBATIM

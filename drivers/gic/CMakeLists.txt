@@ -1,6 +1,6 @@
 target_sources(socfpga_drivers PRIVATE
-    socfpga_gic.c
-    socfpga_gic_reg.c
+    arm_gic.c
+    arm_gic_reg.c
     socfpga_interrupt.c
     socfpga_interrupt.h
     )

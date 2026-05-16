@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -18,7 +18,7 @@ static void erdp_register_update();
 void display_event_trbs(struct xhci_data *xhci)
 {
     cache_force_invalidate((void *) xhci->xer_ring.xer_enqueue_ptr,
-            (size_t) (XHCI_EVENT_RING_SEG_LENTH * sizeof(xhci_trb_t)));
+            (size_t) (XHCI_EVENT_RING_SEG_LENGTH * sizeof(xhci_trb_t)));
     for (int i = 0; i < 10; i++)
     {
         DEBUG(" ID --> %d", i);
@@ -172,7 +172,7 @@ static void erdp_register_update(xer_event_ring_t *xer_ring)
         /* EHB flag */
         erdp_addr |= 8UL;
         /* reload the event ring trb count to initial value of EP_TRB_SEG_LENGTH */
-        xer_ring->trb_count = XHCI_EVENT_RING_SEG_LENTH;
+        xer_ring->trb_count = XHCI_EVENT_RING_SEG_LENGTH;
     }
     else
     {

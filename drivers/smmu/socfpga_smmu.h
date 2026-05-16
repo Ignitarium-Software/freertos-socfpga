@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -74,7 +74,7 @@
 #ifndef __SOCFPGA_SMMU__
 #define __SOCFPGA_SMMU__
 
-#define SMMU_MAX_STREAM_ID    0xAU
+#define SMMU_MAX_STREAM_ID    0x20U
 
 #define SMMU_STREAM_ID_TSN0     0x1
 #define SMMU_STREAM_ID_TSN1     0x2
@@ -227,6 +227,11 @@ typedef struct
     uint64_t lvl2_page_table_1tb[512] __attribute__((aligned(4096)));
 } smmu_descriptors_t;
 
+/**
+ * @brief Enable the SMMU.
+ *
+ * @return 0 on success, negative error code on failure.
+ */
 int32_t smmu_enable(void);
 
 #endif

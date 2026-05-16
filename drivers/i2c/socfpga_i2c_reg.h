@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -9,9 +9,9 @@
 #ifndef __SOCFPGA_I2C_REG_H__
 #define __SOCFPGA_I2C_REG_H__
 
-/*Get base address*/
-#define GET_I2C_BASE_ADDRESS(instance)    ((uint32_t)(0x10C02800U + \
-    (instance * 0x100U)))
+/* Get base addr */
+#define GET_I2C_BASE_ADDR(instance)       ((uint32_t)(0x10C02800U + \
+    ((instance) * 0x100U)))
 
 /* I2C Control Register */
 #define I2C_CON                                           0x0000U
@@ -29,7 +29,7 @@
 #define I2C_FS_SCL_HCNT                                   0x001CU
 /* Fast Mode or Fast Mode Plus I2C Clock SCL Low Count Register */
 #define I2C_FS_SCL_LCNT                                   0x0020U
-/* High Speed I2C Clock SCL Low Count Register */
+/* I2C Interrupt Status Register */
 #define I2C_INTR_STAT                                     0x002CU
 /* I2C Interrupt Mask Register */
 #define I2C_INTR_MASK                                     0x0030U
@@ -79,7 +79,7 @@
 #define I2C_DMA_CR                                        0x0088U
 /* DMA Transmit Data Level Register */
 #define I2C_DMA_TDLR                                      0x008CU
-/* DMA Transmit Data Level Register */
+/* DMA Receive Data Level Register */
 #define I2C_DMA_RDLR                                      0x0090U
 /* I2C SDA Setup Register */
 #define I2C_SDA_SETUP                                     0x0094U

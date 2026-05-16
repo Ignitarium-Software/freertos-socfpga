@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -346,7 +346,7 @@ int run_fcs_close_service_session(char *uuid)
         return -EIO;
     }
     close_session_arg = session_id;
-    DEBUG("Close_session: session_id: %lu", close_session_arg);
+    DEBUG("Close_session: session_id: %u", session_id);
     ret = sip_svc_send(fcs_handle, FCS_CLOSE_SESSION, &close_session_arg,
             sizeof(close_session_arg), &resp_err, sizeof(resp_err));
 
@@ -421,7 +421,7 @@ int run_fcs_random_number_ext(char *rand_buf, char *uuid,
     cache_force_invalidate(fcs_out_ops_buffer, rand_size +
             FCS_RESP_HEADER_SIZE);
 
-    DEBUG("Random_number_ext: rand_size: %lu", rand_size + extra_data);
+    DEBUG("Random_number_ext: rand_size: %u", rand_size + extra_data);
     ret = sip_svc_send(fcs_handle, FCS_RANDOM_NUMBER, rng_args,
             sizeof(rng_args), rng_resp, sizeof(rng_resp));
     if (ret == 0)
@@ -482,7 +482,7 @@ int run_fcs_import_service_key(char *uuid, char *key,
     cache_force_write_back((void *)fcs_inp_ops_buffer, ((size_t)key_size +
             FCS_KEY_HEADER_SIZE));
 
-    DEBUG("Import_service_key: key_buffer: %lx, key_size: %lu", (uint64_t)key,
+    DEBUG("Import_service_key: key_buffer: %lx, key_size: %u", (uint64_t)key,
             key_size);
     ret = sip_svc_send(fcs_handle, FCS_IMPORT_SERVICE_KEY, import_key_args,
             sizeof(import_key_args), import_key_resp, sizeof(import_key_resp));
@@ -533,7 +533,7 @@ int run_fcs_export_service_key(char *uuid, uint32_t key_id,
     export_key_args[3] = *key_size;
     cache_force_invalidate(fcs_out_ops_buffer, FCS_EXPORT_KEY_MAX_SIZE);
 
-    DEBUG("Export_service_key: key_id: %lu", key_id);
+    DEBUG("Export_service_key: key_id: %u", key_id);
     ret = sip_svc_send(fcs_handle, FCS_EXPORT_SERVICE_KEY, export_key_args,
             sizeof(export_key_args), export_key_resp, sizeof(export_key_resp));
 
@@ -581,7 +581,7 @@ int run_fcs_remove_service_key(char *uuid, uint32_t key_id)
     remove_key_args[0] = session_id;
     remove_key_args[1] = key_id;
 
-    DEBUG("Remove_service_key: key_id: %lu", key_id);
+    DEBUG("Remove_service_key: key_id: %u", key_id);
     ret = sip_svc_send(fcs_handle, FCS_REMOVE_SERVICE_KEY, remove_key_args,
             sizeof(remove_key_args), remove_key_resp, sizeof(remove_key_resp));
 
@@ -628,7 +628,7 @@ int run_fcs_get_service_key_info(char *uuid, uint32_t key_id,
     get_key_info_args[3] = *key_info_size;
     cache_force_write_back(key_info, FCS_KEY_INFO_MAX_RESP);
 
-    DEBUG("Get_service_key_info: key_id: %lu", key_id);
+    DEBUG("Get_service_key_info: key_id: %u", key_id);
     ret = sip_svc_send(fcs_handle, FCS_GET_SERVICE_KEY_INFO, get_key_info_args,
             sizeof(get_key_info_args), get_key_info_resp,
             sizeof(get_key_info_resp));
@@ -690,7 +690,7 @@ int run_fcs_create_service_key(char *uuid, char *key,
     cache_force_write_back((void *)fcs_inp_ops_buffer, ((size_t)key_size +
             FCS_KEY_HEADER_SIZE));
 
-    DEBUG("Create_service_key: key_buffer: %lx, key_size: %lu", (uint64_t)key,
+    DEBUG("Create_service_key: key_buffer: %lx, key_size: %u", (uint64_t)key,
             key_size);
     ret = sip_svc_send(fcs_handle, FCS_CREATE_SERVICE_KEY, create_key_args,
             sizeof(create_key_args), create_key_resp, sizeof(create_key_resp));
@@ -736,7 +736,8 @@ int run_fcs_service_get_provision_data(char *prov_data,
     cache_force_invalidate(prov_data, FCS_PROV_DATA_MAX_SIZE);
 
     prov_data_arg = (uint64_t)prov_data;
-    DEBUG("Get_provision_data: prov_data_buffer: %x", (uint32_t)prov_data);
+    DEBUG("Get_provision_data: prov_data_buffer: %lx",
+            (uint64_t)(uintptr_t)prov_data);
     ret = sip_svc_send(fcs_descriptor->security_handle, FCS_GET_PROVISION_DATA,
             &prov_data_arg, sizeof(prov_data_arg), prov_data_resp,
             sizeof(prov_data_resp));
@@ -783,7 +784,7 @@ int run_fcs_send_certificate(char *cert_data, uint32_t cert_size,
     send_cert_args[1] = (uint64_t)cert_size + sizeof(uint32_t);
     cache_force_write_back(fcs_inp_ops_buffer, cert_size + sizeof(uint32_t));
 
-    DEBUG("Send_certificate: cert_buffer: %lx, cert_size: %lu",
+    DEBUG("Send_certificate: cert_buffer: %lx, cert_size: %u",
             (uint64_t)cert_data, cert_size);
     ret = sip_svc_send(fcs_descriptor->security_handle, FCS_SEND_CERTIFICATE,
             send_cert_args, sizeof(send_cert_args), send_cert_resp,
@@ -828,8 +829,8 @@ int run_fcs_service_counter_set_preauthorized(uint8_t type, uint32_t value,
     cntr_set_preauth_args[1] = value;
     cntr_set_preauth_args[2] = test;
 
-    DEBUG("Counter_set_preauthorized: type: %lu, value: %lu, test: %lu", type,
-            value, test);
+    DEBUG("Counter_set_preauthorized: type: %u, value: %u, test: %u",
+            (unsigned int)type, value, test);
     ret = sip_svc_send(fcs_descriptor->security_handle, FCS_CNTR_SET_PREAUTH,
             cntr_set_preauth_args, sizeof(cntr_set_preauth_args),
             &cntr_set_preauth_err, sizeof(cntr_set_preauth_err));
@@ -888,8 +889,8 @@ static int run_fcs_get_digest_init(char *uuid,
     fcs_digest_init_args[3] = FCS_DIGEST_PARAM_SIZE;
     fcs_digest_init_args[4] = param_data;
 
-    DEBUG("Get_digest_init: key_id: %lu, "
-            "op_mode: %lu, dig_size: %lu", key_id, op_mode, dig_size);
+    DEBUG("Get_digest_init: key_id: %u, "
+            "op_mode: %u, dig_size: %u", key_id, op_mode, dig_size);
     return sip_svc_send(fcs_handle, FCS_GET_DIGEST_INIT, fcs_digest_init_args,
             sizeof(fcs_digest_init_args), NULL, 0);
 }
@@ -931,7 +932,7 @@ static int run_fcs_get_digest_update(char *uuid, uint32_t context_id,
 
     if (final == FCS_FINALIZE)
     {
-        DEBUG("Get_digest_finalize: src_addrr: %x, src_size: %lu",
+        DEBUG("Get_digest_finalize: src_addrr: %lx, src_size: %u",
                 (uint64_t)src_data, src_size);
         ret = sip_svc_send(fcs_handle, FCS_GET_DIGEST_FINALIZE,
                 fcs_digest_update_args, sizeof(fcs_digest_update_args),
@@ -939,7 +940,7 @@ static int run_fcs_get_digest_update(char *uuid, uint32_t context_id,
     }
     else
     {
-        DEBUG("Get_digest_update: src_addrr: %x, src_size: %lu",
+        DEBUG("Get_digest_update: src_addrr: %lx, src_size: %u",
                 (uint64_t)src_data, src_size);
         ret = sip_svc_send(fcs_handle, FCS_GET_DIGEST_UPDATE,
                 fcs_digest_update_args, sizeof(fcs_digest_update_args),
@@ -1061,7 +1062,7 @@ static int run_fcs_mac_verify_init(char *uuid, uint32_t context_id,
     fcs_mac_verify_init_args[3] = FCS_MAC_PARAM_SIZE;
     fcs_mac_verify_init_args[4] = FCS_SET_DIGEST_SIZE((uint64_t)dig_size);
 
-    DEBUG("Mac_verify_init: key_id: %lu, dig_size: %lu", key_id, dig_size);
+    DEBUG("Mac_verify_init: key_id: %u, dig_size: %u", key_id, dig_size);
     return sip_svc_send(fcs_handle, FCS_MAC_VERIFY_INIT,
             fcs_mac_verify_init_args, sizeof(fcs_mac_verify_init_args), NULL,
             0);
@@ -1103,8 +1104,8 @@ static int run_fcs_mac_verify_update(char *uuid, uint32_t context_id,
 
     if (final == FCS_UPDATE)
     {
-        DEBUG("Mac_verify_update: src_addr: %lx, src_size: %lu, "
-                "mac_data_size: %lu", (uint64_t)src_addr, src_size,
+        DEBUG("Mac_verify_update: src_addr: %lx, src_size: %u, "
+                "mac_data_size: %u", (uint64_t)src_addr, src_size,
                 mac_data_size);
         ret = sip_svc_send(fcs_handle, FCS_MAC_VERIFY_UPDATE,
                 fcs_mac_verify_args, sizeof(fcs_mac_verify_args),
@@ -1112,8 +1113,8 @@ static int run_fcs_mac_verify_update(char *uuid, uint32_t context_id,
     }
     else
     {
-        DEBUG("Mac_verify_finalize: src_addr: %lx, src_size: %lu, "
-                "mac_data_size: %lu", (uint64_t)src_addr, src_size,
+        DEBUG("Mac_verify_finalize: src_addr: %lx, src_size: %u, "
+                "mac_data_size: %u", (uint64_t)src_addr, src_size,
                 mac_data_size);
         ret = sip_svc_send(fcs_handle, FCS_MAC_VERIFY_FINALIZE,
                 fcs_mac_verify_args, sizeof(fcs_mac_verify_args),
@@ -1273,7 +1274,7 @@ int run_fcs_sdos_encrypt(char *uuid, uint32_t context_id,
     cache_force_write_back(src_data, src_size);
     cache_force_invalidate(resp_data, FCS_SDOS_ENC_MAX_RESP);
 
-    DEBUG("Sdos_encrypt: src_addr: %lx, src_size: %lu, resp_addr: %lx",
+    DEBUG("Sdos_encrypt: src_addr: %lx, src_size: %u, resp_addr: %lx",
             (uint64_t)src_data, src_size, (uint64_t)resp_data);
     ret = sip_svc_send(fcs_handle, FCS_SDOS_CRYPTION, sdos_encrypt_args,
             sizeof(sdos_encrypt_args), sdos_smc_resp, sizeof(sdos_smc_resp));
@@ -1342,7 +1343,8 @@ int run_fcs_sdos_decrypt(char *uuid, uint32_t context_id,
     cache_force_invalidate(resp_data, FCS_SDOS_DEC_MAX_RESP);
 
     DEBUG(
-            "Sdos_decrypt: owner_flag: %d, src_addr: %lx, src_size: %lu, resp_addr: %lx",
+            "Sdos_decrypt: owner_flag: 0x%lx, src_addr: 0x%lx, src_size: %u, "
+            "resp_addr: 0x%lx, resp_size: %u",
             owner_flag, (uint64_t)src_data, src_size, (uint64_t)resp_data,
             *resp_size);
     ret = sip_svc_send(fcs_handle, FCS_SDOS_CRYPTION, sdos_decrypt_args,
@@ -1412,8 +1414,8 @@ int run_fcs_hkdf_request(char *uuid, uint32_t key_id,
     hkdf_args[5] = output_key_size;
     cache_force_write_back(input_buffer, 400);
 
-    DEBUG("HKDF_request: key_id: %lu, step_type: %lu, "
-            "mac_mode: %lu, input_buffer: %lx, output_key_size: %lu", key_id,
+    DEBUG("HKDF_request: key_id: %u, step_type: %u, "
+            "mac_mode: %u, input_buffer: %lx, output_key_size: %u", key_id,
             step_type, mac_mode, (uint64_t)input_buffer, output_key_size);
     ret = sip_svc_send(fcs_handle, FCS_HKDF_REQUEST, hkdf_args,
             sizeof(hkdf_args), hkdf_resp, sizeof(hkdf_resp));
@@ -1588,7 +1590,7 @@ int run_fcs_mctp_cmd_send(char *src_data, uint32_t src_size, char *resp_data,
     mctp_send_args[1] = src_size;
     mctp_send_args[2] = (uint64_t)resp_data;
 
-    DEBUG("Mctp_send: src_data: %lx, src_size: %lu, resp_data: %lx",
+    DEBUG("Mctp_send: src_data: %lx, src_size: %u, resp_data: %lx",
             (uint64_t)src_data, src_size, (uint64_t)resp_data);
     ret = sip_svc_send(fcs_descriptor->security_handle, FCS_MCTP_SEND_MSG,
             mctp_send_args, sizeof(mctp_send_args), mctp_send_resp,
@@ -2120,7 +2122,7 @@ int run_fcs_ecdsa_hash_sign(char *uuid, uint32_t context_id, uint32_t key_id,
     fcs_hash_sign_args[5] = FCS_ECDSA_HASH_SIGN_MAX_RESP;
 
     DEBUG("Hash data sign finalize: Hash data: %lx, Hash data size: %u",
-            hash_data, hash_data_size);
+            (uint64_t)(uintptr_t)hash_data, hash_data_size);
     ret = sip_svc_send(fcs_handle, FCS_ECDSA_HASH_SIGN_FINALIZE,
             fcs_hash_sign_args, sizeof(fcs_hash_sign_args), hash_sign_smc_resp,
             sizeof(hash_sign_smc_resp));
@@ -2508,8 +2510,10 @@ static int run_fcs_ecdsa_sha2_data_sign_verify_update(char *uuid,
     if (final == FCS_UPDATE)
     {
         DEBUG(
-                "ECDSA SHA2 sign verify update: src_addr: %x, src_size: %u, sig_addr:%u,"
-                "sig_size: %u", src_addr, src_size, signed_data, sig_size);
+                "ECDSA SHA2 sign verify update: src_addr: %lx, src_size: %u, "
+                "sig_addr: %lx, sig_size: %u",
+                (uint64_t)(uintptr_t)src_addr, src_size,
+                (uint64_t)(uintptr_t)signed_data, sig_size);
         if (pub_key_data != NULL)
         {
             printf("Pub key data: %lx, Pub key size: %u\n",
@@ -2772,8 +2776,8 @@ int run_fcs_ecdh_request(char *uuid, uint32_t key_id,
     fcs_ecdh_args[4] = (uint64_t)fcs_out_ops_buffer;
     fcs_ecdh_args[5] = FCS_ECDH_MAX_RESP;
 
-    DEBUG("ECDH finalize: pub_key_addr: %x, pub_key_size: %u", pub_key_data,
-            pub_key_size);
+    DEBUG("ECDH finalize: pub_key_addr: %lx, pub_key_size: %u",
+            (uint64_t)(uintptr_t)pub_key_data, pub_key_size);
     ret = sip_svc_send(fcs_handle, FCS_ECDH_FINALIZE, fcs_ecdh_args,
             sizeof(fcs_ecdh_args), ecdh_smc_resp, sizeof(ecdh_smc_resp));
 

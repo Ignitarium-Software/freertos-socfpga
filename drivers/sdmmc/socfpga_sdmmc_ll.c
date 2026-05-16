@@ -227,7 +227,7 @@ void sdmmc_set_xfer_config(cmd_parameters_t const *params)
 
     WR_REG32(SRS_BASE_ADDR + SDMMC_SRS03, srs03_reg_value);
     /*wait for the configurations to reflect*/
-    for (int i = 0; i < 10000; i++)
+    for (volatile int i = 0; i < 10000; i++)
     {
 
     }

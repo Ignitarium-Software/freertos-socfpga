@@ -7,6 +7,7 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <errno.h>
 #include "osal_log.h"
 #include "socfpga_defines.h"
@@ -74,6 +75,7 @@ typedef struct
 } ecc_handle_t;
 
 ecc_handle_t hecc;
+static bool ecc_initialized;
 
 static inline void ecc_smc_io_write32(uint32_t addr, uint32_t val)
 {
@@ -294,6 +296,11 @@ int ecc_enable_modules(uint32_t modules)
         ERROR("Invalid ECC module list");
         return -EINVAL;
     }
+    if (!ecc_initialized)
+    {
+        ERROR("ECC not initialized");
+        return -EINVAL;
+    }
     for (uint32_t i = 0U; i < ECC_MAX_INSTANCES; i++)
     {
         if ((modules & (1U << i)) == 0U)
@@ -454,6 +461,7 @@ int ecc_init(void)
     hecc.ecc_instances[ECC_USB1_RAM0].base_addr = ECC_USB1_RAM0_BASE_ADDR;
     hecc.ecc_instances[ECC_USB1_RAM1].base_addr = ECC_USB1_RAM1_BASE_ADDR;
     hecc.ecc_instances[ECC_USB1_RAM2].base_addr = ECC_USB1_RAM2_BASE_ADDR;
+    ecc_initialized = true;
 
     return 0;
 }
@@ -463,6 +471,11 @@ int ecc_set_callback(ecc_callback_t user_callback)
     if (user_callback == NULL)
     {
         ERROR("User callback cannot be NULL");
+        return -EINVAL;
+    }
+    if (!ecc_initialized)
+    {
+        ERROR("ECC not initialized");
         return -EINVAL;
     }
     hecc.user_cb = user_callback;
@@ -476,6 +489,11 @@ int ecc_inject_error(uint32_t ecc_module, uint32_t error_type)
     if (ecc_module >= ECC_MAX_INSTANCES)
     {
         ERROR("Invalid ECC module %u", (unsigned int)ecc_module);
+        return -EINVAL;
+    }
+    if (!ecc_initialized)
+    {
+        ERROR("ECC not initialized");
         return -EINVAL;
     }
 
@@ -527,6 +545,11 @@ int ecc_get_sbe_error_count(uint32_t ecc_module)
         ERROR("Invalid parameters");
         return -EINVAL;
     }
+    if (!ecc_initialized)
+    {
+        ERROR("ECC not initialized");
+        return -EINVAL;
+    }
     return hecc.ecc_instances[ecc_module].sbe_err_cnt;
 }
 int ecc_get_dbe_error_count(uint32_t ecc_module)
@@ -535,6 +558,11 @@ int ecc_get_dbe_error_count(uint32_t ecc_module)
             !(hecc.module_init & (1U << ecc_module)))
     {
         ERROR("Invalid parameters");
+        return -EINVAL;
+    }
+    if (!ecc_initialized)
+    {
+        ERROR("ECC not initialized");
         return -EINVAL;
     }
     return hecc.ecc_instances[ecc_module].dbe_err_cnt;

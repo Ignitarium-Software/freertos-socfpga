@@ -7,7 +7,7 @@
  */
 
 #include <stdint.h>
-#include "socfpga_gic_reg.h"
+#include "arm_gic_reg.h"
 
 #define GIC_REG_WRITE(reg, \
             val)    __asm__ __volatile__ ("MSR " #reg ", %0\n\tDSB SY\n\tISB" : \

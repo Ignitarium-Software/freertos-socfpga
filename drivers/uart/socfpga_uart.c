@@ -7,6 +7,7 @@
  */
 #include <string.h>
 #include <errno.h>
+#include <stdbool.h>
 #include "socfpga_uart.h"
 #include "socfpga_uart_ll.h"
 #include "socfpga_uart_reg.h"
@@ -14,14 +15,18 @@
 #include "osal.h"
 
 #define GET_INT_ID(instance)    ((instance == 1U) ? (UART1IRQ) : (UART0IRQ))
+
+#ifndef configUART_SYNC_TIMEOUT_MS
+#define configUART_SYNC_TIMEOUT_MS  OSAL_TIMEOUT_WAIT_FOREVER
+#endif
 struct uart_descriptor
 {
-    BaseType_t is_open;
+    bool is_open;
     uint32_t instance;
-    BaseType_t tx_is_busy;
-    BaseType_t rx_is_busy;
-    BaseType_t tx_is_async;
-    BaseType_t rx_is_async;
+    bool tx_is_busy;
+    bool rx_is_busy;
+    bool tx_is_async;
+    bool rx_is_async;
     uint32_t base_address;
     size_t tx_bytes_left;
     size_t rx_bytes_left;
@@ -46,13 +51,13 @@ void uart_isr(void *param);
 /**
  * @brief Check if the UART handle is valid
  */
-static BaseType_t uart_is_handle_valid(uart_handle_t handle)
+static bool uart_is_handle_valid(uart_handle_t handle)
 {
     if ((handle == &uart_descriptors[0]) || (handle == &uart_descriptors[1]))
     {
-        return 1;
+        return true;
     }
-    return 0;
+    return false;
 }
 
 uart_handle_t uart_open(uint32_t instance)
@@ -74,7 +79,7 @@ uart_handle_t uart_open(uint32_t instance)
     }
 
     (void)memset(handle, 0, sizeof(struct uart_descriptor));
-    handle->is_open = 1;
+    handle->is_open = true;
     handle->instance = instance;
     handle->base_address = GET_UART_BASE_ADDRESS(instance);
 
@@ -96,7 +101,7 @@ uart_handle_t uart_open(uint32_t instance)
     handle->wr_sem = osal_semaphore_create(&handle->wr_sem_mem);
     if ((handle->mutex == NULL) || (handle->rd_sem == NULL) || (handle->wr_sem == NULL))
     {
-        handle->is_open = 0;
+        handle->is_open = false;
         return NULL;
     }
     uart_init(instance);
@@ -112,7 +117,7 @@ int32_t uart_ioctl(uart_handle_t const huart, uart_ioctl_t cmd, void *const buf)
     int32_t res = 0;
     uint16_t bytes_left;
 
-    if (uart_is_handle_valid(huart) == 0)
+    if (uart_is_handle_valid(huart) == false)
     {
         return -EINVAL;
     }
@@ -189,13 +194,25 @@ int32_t uart_set_callback(uart_handle_t const huart, uart_callback_t callback,
         return -EINVAL;
     }
 
-    if (huart->tx_is_busy || huart->rx_is_busy)
+    if (osal_mutex_lock(huart->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        return -EBUSY;
-    }
+        if (huart->tx_is_busy || huart->rx_is_busy)
+        {
+            if (osal_mutex_unlock(huart->mutex) == false)
+            {
+                return -EIO;
+            }
+            return -EBUSY;
+        }
 
-    huart->callback_fn = callback;
-    huart->cb_user_context = param;
+        huart->callback_fn = callback;
+        huart->cb_user_context = param;
+
+        if (osal_mutex_unlock(huart->mutex) == false)
+        {
+            return -EIO;
+        }
+    }
 
     return 0;
 }
@@ -264,14 +281,14 @@ static int32_t uart_read(uart_handle_t huart, uint8_t *const buffer,
 int32_t uart_write_async(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes)
 {
-    if ((uart_is_handle_valid(huart) == 0) || (buf == NULL) || (nbytes == 0U))
+    if ((uart_is_handle_valid(huart) == false) || (buf == NULL) || (nbytes == 0U))
     {
         return -EINVAL;
     }
 
     if (osal_mutex_lock(huart->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (huart->is_open == 0)
+        if (huart->is_open == false)
         {
             if (osal_mutex_unlock(huart->mutex) == false)
             {
@@ -308,15 +325,15 @@ int32_t uart_write_async(uart_handle_t const huart, uint8_t *const buf,
 int32_t uart_write_sync(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes)
 {
-    BaseType_t tx_sem_return;
-    if ((uart_is_handle_valid(huart) == 0) || (buf == NULL) || (nbytes == 0U))
+    bool tx_sem_return;
+    if ((uart_is_handle_valid(huart) == false) || (buf == NULL) || (nbytes == 0U))
     {
         return -EINVAL;
     }
 
     if (osal_mutex_lock(huart->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (huart->is_open == 0)
+        if (huart->is_open == false)
         {
             if (osal_mutex_unlock(huart->mutex) == false)
             {
@@ -348,8 +365,8 @@ int32_t uart_write_sync(uart_handle_t const huart, uint8_t *const buf,
     uart_write(huart, buf, nbytes);
 
     tx_sem_return =
-            osal_semaphore_wait(huart->wr_sem, OSAL_TIMEOUT_WAIT_FOREVER);
-    if (tx_sem_return == 1)
+            osal_semaphore_wait(huart->wr_sem, configUART_SYNC_TIMEOUT_MS);
+    if (tx_sem_return == true)
     {
         huart->tx_is_busy = false;
     }
@@ -360,35 +377,41 @@ int32_t uart_write_sync(uart_handle_t const huart, uint8_t *const buf,
 int32_t uart_write_polling(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes)
 {
-    if (!(uart_is_handle_valid(huart)) || (buf == NULL) || (nbytes == 0U))
+    uint32_t written;
+
+    if ((uart_is_handle_valid(huart) == false) || (buf == NULL) || (nbytes == 0U))
     {
         return -EINVAL;
     }
 
-    if (!(huart->is_open))
+    if (huart->is_open == false)
     {
         return -EINVAL;
     }
 
     huart->tx_is_busy = true;
     huart->tx_is_async = false;
-    uart_tx_polling(huart->base_address, buf, nbytes);
+    written = uart_tx_polling(huart->base_address, buf, nbytes);
     huart->tx_is_busy = false;
 
+    if (written != nbytes)
+    {
+        return -EIO;
+    }
     return 0;
 }
 
 int32_t uart_read_async(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes)
 {
-    if ((uart_is_handle_valid(huart) == 0) || (buf == NULL) || (nbytes == 0U))
+    if ((uart_is_handle_valid(huart) == false) || (buf == NULL) || (nbytes == 0U))
     {
         return -EINVAL;
     }
 
     if (osal_mutex_lock(huart->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (huart->is_open == 0)
+        if (huart->is_open == false)
         {
             if (osal_mutex_unlock(huart->mutex) == false)
             {
@@ -428,15 +451,15 @@ int32_t uart_read_async(uart_handle_t const huart, uint8_t *const buf,
 int32_t uart_read_sync(uart_handle_t const huart, uint8_t *const buf,
         uint32_t nbytes)
 {
-    BaseType_t rx_sem_return;
+    bool rx_sem_return;
 
-    if ((uart_is_handle_valid(huart) == 0) || (buf == NULL) || (nbytes == 0U))
+    if ((uart_is_handle_valid(huart) == false) || (buf == NULL) || (nbytes == 0U))
     {
         return -EINVAL;
     }
     if (osal_mutex_lock(huart->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
-        if (huart->is_open == 0)
+        if (huart->is_open == false)
         {
             if (osal_mutex_unlock(huart->mutex) == false)
             {
@@ -470,11 +493,12 @@ int32_t uart_read_sync(uart_handle_t const huart, uint8_t *const buf,
     }
 
     rx_sem_return =
-            osal_semaphore_wait(huart->rd_sem, OSAL_TIMEOUT_WAIT_FOREVER);
+            osal_semaphore_wait(huart->rd_sem, configUART_SYNC_TIMEOUT_MS);
 
-    if (rx_sem_return == 0)
+    if (rx_sem_return == false)
     {
         uart_disable_interrupt(huart->base_address, INTERRUPT_RX);
+        huart->rx_is_busy = false;
     }
     else
     {
@@ -486,7 +510,7 @@ int32_t uart_read_sync(uart_handle_t const huart, uint8_t *const buf,
 
 int32_t uart_cancel(uart_handle_t const huart)
 {
-    if ((huart == NULL) || (uart_is_handle_valid(huart) == 0))
+    if ((huart == NULL) || (uart_is_handle_valid(huart) == false))
     {
         return -EINVAL;
     }
@@ -496,7 +520,7 @@ int32_t uart_cancel(uart_handle_t const huart)
 int32_t uart_close(uart_handle_t const huart)
 {
 
-    if ((huart == NULL) || (huart->is_open == 0))
+    if ((huart == NULL) || (huart->is_open == false))
     {
         return -EINVAL;
     }
@@ -511,7 +535,7 @@ int32_t uart_close(uart_handle_t const huart)
     }
 
     uart_deinit(huart->instance);
-    huart->is_open = 0;
+    huart->is_open = false;
 
     return 0;
 }
@@ -527,7 +551,7 @@ void uart_isr(void *param)
     uint16_t tx_byte_count;
 
     huart = (uart_handle_t)param;
-    if (uart_is_handle_valid(huart) == 0)
+    if (uart_is_handle_valid(huart) == false)
     {
         return;
     }

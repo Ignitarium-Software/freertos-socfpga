@@ -4,6 +4,9 @@ set(FREERTOS_TOP_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 set(ARCH freertos_aarch64)
 include(FetchContent)
 
+#check host setup
+include(${CMAKE_CURRENT_SOURCE_DIR}/tools/host_check.cmake)
+
 if(NOT(SOC STREQUAL "AGILEX3" OR SOC STREQUAL "AGILEX5"))
     message(STATUS "Defaulting SOC to AGILEX5.")
     set(SOC "AGILEX5" CACHE STRING "Choose the SOC." FORCE)
@@ -116,4 +119,12 @@ target_link_libraries(freertos_socfpga freertos_kernel)
 target_sources(freertos_socfpga PRIVATE
     ${MAIN_SOURCE_SRCS}
     $<TARGET_OBJECTS:socfpga_drivers>
+    # portStandardLib.c belongs here rather than in freertos_kernel_port because
+    # it depends on console_read/fill/signal from socfpga_drivers. Compiling it
+    # into freertos_kernel_port embeds it in libfreertos_kernel.a, which is linked
+    # after libfreertos_socfpga.a; the GNU linker's single-pass archive scan cannot
+    # resolve the back-reference, producing undefined-symbol link errors. Placing
+    # it here puts it in the same archive as socfpga_console.c, so the dependency
+    # is resolved within a single archive pass.
+    ${FREERTOS_TOP_DIR}/FreeRTOS/portable/GCC/ARM_AARCH64/portStandardLib.c
     )

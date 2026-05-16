@@ -9,22 +9,17 @@
 #include "dwc3.h"
 #include "dwc3_ll.h"
 #include "osal_log.h"
+#include "socfpga_defines.h"
 
 int dwc3_init(void)
 {
+    uint32_t ghwparams0 = RD_REG32(USBBASE + USB3_GHWPARAMS0);
+    uint32_t ghwparams1 = RD_REG32(USBBASE + USB3_GHWPARAMS1);
+    uint32_t ghwparams3 = RD_REG32(USBBASE + USB3_GHWPARAMS3);
     uint32_t phy_info;
-    int ret;
+    int ret = 0;
 
-    dwc3_ghwparams_t *dwc3_hwparams = NULL;
-
-    dwc3_hwparams = get_dwc3_ghwparams();
-    if (dwc3_hwparams == NULL)
-    {
-        ERROR("Unable to get DWC3 hardware parameters");
-        return -ENODEV;
-    }
-
-    phy_info = get_usb3_phy_info(dwc3_hwparams->ghwparams3);
+    phy_info = get_usb3_phy_info(ghwparams3);
     switch (phy_info)
     {
         case DWC3_SS_PHY_3_0:
@@ -40,11 +35,11 @@ int dwc3_init(void)
             break;
     }
 
-    usb2_phy_setup(dwc3_hwparams->ghwparams3);
+    usb2_phy_setup(ghwparams3);
 
-    setup_dwc3_gctl(dwc3_hwparams->ghwparams1);
+    setup_dwc3_gctl(ghwparams1);
 
-    ret = dwc3_set_usb_host_mode(dwc3_hwparams->ghwparams0);
+    ret = dwc3_set_usb_host_mode(ghwparams0);
     if (ret != 0)
     {
         ERROR("Unable to setup DWC3 in host mode");

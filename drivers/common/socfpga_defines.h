@@ -1,9 +1,9 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
- * HAL driver implementation for i2c
+ * Header file for common HAL register access helpers
  */
 
 #ifndef __SOCFPGA_DEFINES_H__

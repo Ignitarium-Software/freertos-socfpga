@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -23,12 +23,12 @@
  * @details
  * FPGA manager driver supports both FPGA configuration and partial reconfiguration through HPS.
  *
- * FPGA confgiguration : Fpga configuration configures the FPGA fabric via the core bitstream
+ * FPGA configuration : Fpga configuration configures the FPGA fabric via the core bitstream
  * via HPS. The HPS sends bitstream to FPGA via SDM.
  *
  * Partial Reconfiguration : PR allows the user to configure only a specific portion of the fpga
- * (refered as PR region ) fabric. The process of PR is same as fpga configuration expect that the
- * PR region needs to be freezed before loading the bitstream, and unfreeze the PR region after
+ * (referred as PR region ) fabric. The process of PR is same as fpga configuration except that the
+ * PR region needs to be frozen before loading the bitstream, and unfreeze the PR region after
  * the bitstream is configured. The freeze/unfreeze operation can be performed using the freeze
  * IP driver. <br>
  * To see example usage, refer @ref fpga_manager_sample
@@ -51,7 +51,7 @@
  * @brief  Sends the bitstream data to the fpga and configures the fpga.
  *
  * @param[in] rbf_ptr   Reference to the bitstream data
- * @param[in] rbf_file_size Length of bistream file
+ * @param[in] rbf_file_size Length of bitstream file
  *
  * @return
  * - 0:    if fpga bitstream configuration is success

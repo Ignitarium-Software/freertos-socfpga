@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -19,9 +19,9 @@
  * @defgroup iossm IOSSM
  * @brief APIs for SoC FPGA IOSSM driver.
  * @details
- * IOSSM is a ECC engine for DDR error detection and correction.
- * It provides APIs to read ECC status,inject single and double
- * bit errors, acknowledge interrupts, andset callbacks
+ * IOSSM is an ECC engine for DDR error detection and correction.
+ * It provides APIs to read ECC status, inject single and double
+ * bit errors, acknowledge interrupts, and set callbacks
  * for error handling. For example usage,
  * see @ref iossm_sample "IOSSM sample application".
  * @ingroup drivers
@@ -199,7 +199,7 @@ int32_t iossm_close(uint32_t instance);
 int32_t iossm_read_ecc_status(const iossm_context_t *xhandle);
 
 /**
- * @brief Mask the ecc interrupt on I096B.
+ * @brief Mask the ecc interrupt on IO96B.
  *
  * @param[in] xhandle    iossm handle returned by open API.
  * @param[in] interrupts interrupts to be masked.
@@ -300,6 +300,10 @@ int32_t iossm_get_err_type(const iossm_context_t *xhandle, uint32_t index);
  * @param[in] xhandle iossm handle returned by open API.
  * @param[in] index   index of the error (usually got from status register)
  *
+ * @return
+ * -  Error address offset on success
+ * - -EINVAL: if iossm handle is NULL.
+ * - -EIO:    if the instance is not opened.
  */
 int32_t iossm_get_err_addr_offset(const iossm_context_t *xhandle, uint32_t
         index);

@@ -1,7 +1,7 @@
 /*
  * Common IO - basic V1.0.0
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * Copyright (C) 2025 Altera Corporation
+ * Copyright (C) 2025-2026 Altera Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -119,7 +119,7 @@ typedef enum
 
 /**
  * @brief Used to initialize the timer
- * Once a instance is opened, it needs to be closed before invoking open again.
+ * Once an instance is opened, it needs to be closed before invoking open again.
  *
  *
  * @param[in] instance The Timer instance to open.
@@ -190,7 +190,7 @@ int32_t timer_close(timer_handle_t const htimer);
  * @param[in] period - The desired timer period in micro seconds.
  *	If period exceeds the maximum possible period, it is
  *	rounded to the maximum period. If period value is given as
-     0xFFFFFFFFF, the timer will be set to free running mode.
+     0xFFFFFFFF, the timer will be set to free running mode.
  *
  * @return
  * - 0:       on success

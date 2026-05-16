@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -68,7 +68,7 @@
 #define SDMMC_CMD_ALL_SEND_CID          (2U)     /*!< SDMMC send card ID command */
 #define SDMMC_CMD_SND_REL_ADDR          (3U)     /*!< SDMMC send rel card address command */
 #define SDMMC_CMD_SET_REL_ADD           (3U)     /*!< SDMMC set rel card address command */
-#define SDMMC_CMD_SWITCH                (6U)     /*!< SDMMC swith bus width command */
+#define SDMMC_CMD_SWITCH                (6U)     /*!< SDMMC switch bus width command */
 #define SDMMC_CMD_SELECT_CARD           (7U)     /*!< SDMMC select card command */
 #define SDMMC_CMD_SEND_IF_COND          (8U)     /*!< SDMMC send IF condition command */
 #define SDMMC_CMD_SEND_EXT_CSD          (8U)     /*!< SDMMC send EXT CSD command */

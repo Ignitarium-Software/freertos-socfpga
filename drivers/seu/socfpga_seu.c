@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -111,6 +111,11 @@ int32_t seu_init(void)
 
     seu_descriptor.seu_semphr = osal_semaphore_create(
             &seu_descriptor.seu_semphr_def);
+    if (seu_descriptor.seu_semphr == NULL)
+    {
+        ERROR("Failed to create SEU semaphore");
+        return -ENOMEM;
+    }
     seu_descriptor.pseu_handle = mbox_open_client();
     if (seu_descriptor.pseu_handle == NULL)
     {
@@ -199,8 +204,8 @@ int32_t seu_insert_safe_err(seu_err_params_t err_params)
     {
         return -EIO;
     }
-    DEBUG("SEU insert safe error response: x1: %x x2: %x", smc_resp[0],
-            smc_resp[1]);
+    DEBUG("SEU insert safe error response: x1: 0x%lx x2: 0x%lx",
+            smc_resp[0], smc_resp[1]);
     if (smc_resp[SEU_MBOX_STATUS] != 0UL)
     {
         ERROR("SEU error injection failed");
@@ -244,7 +249,8 @@ read_err_data_t seu_read_err(void)
         err_data.op_state = -EIO;
         return err_data;
     }
-    DEBUG("SEU read error response: x1: %x x2: %x", smc_resp[0], smc_resp[1]);
+    DEBUG("SEU read error response: x1: 0x%lx x2: 0x%lx",
+            smc_resp[0], smc_resp[1]);
     if (smc_resp[SEU_MBOX_STATUS] != 0UL)
     {
         ERROR("SEU read error failed");
@@ -303,7 +309,8 @@ seu_stat_t seu_read_stat(uint8_t sec_addr)
         seu_read_stats.op_state = -EIO;
         return seu_read_stats;
     }
-    DEBUG("SEU read stats response: x1: %x x2: %x", smc_resp[0], smc_resp[1]);
+    DEBUG("SEU read stats response: x1: 0x%lx x2: 0x%lx",
+            smc_resp[0], smc_resp[1]);
     if (smc_resp[SEU_MBOX_STATUS] != 0UL)
     {
         ERROR("SEU read stats failed");
@@ -367,8 +374,8 @@ int32_t seu_insert_ecc_err(uint8_t err_type, uint8_t ram_id, uint8_t
     {
         return -EIO;
     }
-    DEBUG("SEU insert ECC error response: x1: %x x2: %x", smc_resp[0],
-            smc_resp[1]);
+    DEBUG("SEU insert ECC error response: x1: 0x%lx x2: 0x%lx",
+            smc_resp[0], smc_resp[1]);
     if (smc_resp[SEU_MBOX_STATUS] != 0UL)
     {
         ERROR("SEU ECC error injection failed");

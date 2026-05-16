@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -53,7 +53,7 @@ int smc_call(uint64_t function_id, uint64_t *register_val);
  */
 /* end of group smc_call_fns */
 
-#endif /*_SOCFPGA_SIP_HANDLER_H_*/
 /**
  * @}
  */
+#endif /*_SOCFPGA_SIP_HANDLER_H_*/

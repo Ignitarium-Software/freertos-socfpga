@@ -29,12 +29,6 @@ static void vPortSocfpgaSetVirtualTimerControl( uint32_t ulTimerControl )
 }
 /*-----------------------------------------------------------*/
 
-static void vPortSocfpgaSetVirtualTimerValue( uint32_t ulTimerValue )
-{
-    asm volatile ( "MSR CNTV_TVAL_EL0, %0" : : "r" ( ulTimerValue ) );
-}
-/*-----------------------------------------------------------*/
-
 static void vPortSocfpgaSetVirtualTimerCompareValue( void )
 {
     /* The value of the counter will be equal to or greater than

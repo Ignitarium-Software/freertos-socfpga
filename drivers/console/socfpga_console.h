@@ -22,46 +22,46 @@
  *
  * @return 0 on success, -errno on failure.
  */
-int console_init(int id, const char *config_str);
+int console_init(uint32_t id, const char *config_str);
 
 /**
  * @brief Write data to the console.
  *
- * @param buffer Pointer to the data to write.
+ * @param buf Pointer to the data to write.
  * @param length Number of bytes to write.
  *
  * @return Number of bytes written on success, -errno on failure.
  */
-int console_write(unsigned char *const buffer, int length);
+int console_write(unsigned char *const buf, int length);
 
 /**
  * @brief Read data from the console.
  *
- * @param buffer Pointer to the receive buffer.
+ * @param buf Pointer to the receive buffer.
  * @param length Maximum number of bytes to read.
  *
  * @return Number of bytes read on success, -errno on failure.
  */
-int console_read(unsigned char *const buffer, int length);
+int console_read(unsigned char *const buf, int length);
 
 /**
  * @brief Fill the console output buffer with provided data.
  *
  * The data remains in the buffer until console_signal_fill() is called to
- * signal it for write. Use this if the writes needs to be defered and dosent
+ * signal it for write. Use this if the writes need to be deferred and do not
  * invoke a context switch
  *
- * @param buffer Pointer to the data to copy into the read buffer.
+ * @param buf Pointer to the data to copy into the read buffer.
  * @param length Number of bytes to copy.
  *
  * @return Number of bytes copied on success, -errno on failure.
  */
-int console_fill_buffer(unsigned char *const buffer, int length);
+int console_fill_buffer(unsigned char *const buf, int length);
 
 /**
  * @brief Signal that the console buffer has been filled.
  *
- * This functon does nothing if configCONSOLE_MAKE_FLUSH_TASK if false.
+ * This function does nothing if configCONSOLE_MAKE_FLUSH_TASK is false.
  * In that case the console flush is the responsibility of the user.
  */
 void console_signal_fill(void);
@@ -70,6 +70,16 @@ void console_signal_fill(void);
  * @brief Clear any pending console events or state.
  */
 void console_clear_pending(void);
+
+/**
+ * @brief Acquire the console write semaphore.
+ */
+int console_lock(void);
+
+/**
+ * @brief Release the console write semaphore.
+ */
+int console_unlock(void);
 
 /**
  * @brief Deinitialize the console.

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -110,7 +110,7 @@ int init_xhc_event_ring(struct xhci_data *xhci_ptr)
     bzero(xer_ring->erst_ptr, sizeof(xhci_erst_entry_t));
 
     xer_ring->xer_enqueue_ptr = (xhci_trb_t *)(uintptr_t) pvPortAlignedAlloc(64,
-            XHCI_EVENT_RING_SEG_LENTH * sizeof(xhci_trb_t));
+            XHCI_EVENT_RING_SEG_LENGTH * sizeof(xhci_trb_t));
 
     if (xer_ring->xer_enqueue_ptr == NULL)
     {
@@ -130,13 +130,13 @@ int init_xhc_event_ring(struct xhci_data *xhci_ptr)
         return ret;
     }
     bzero(xer_ring->xer_enqueue_ptr,
-            XHCI_EVENT_RING_SEG_LENTH * sizeof(xhci_trb_t));
+            XHCI_EVENT_RING_SEG_LENGTH * sizeof(xhci_trb_t));
 
-    xer_ring->trb_count = XHCI_EVENT_RING_SEG_LENTH;
+    xer_ring->trb_count = XHCI_EVENT_RING_SEG_LENGTH;
 
     xer_ring->erst_ptr->seg_addr = (uint64_t)xer_ring->xer_enqueue_ptr;
     /* number of trbs in the segment */
-    xer_ring->erst_ptr->seg_size = XHCI_EVENT_RING_SEG_LENTH;
+    xer_ring->erst_ptr->seg_size = XHCI_EVENT_RING_SEG_LENGTH;
     xer_ring->erst_ptr->rsvd = 0U;
 
     ring_addr = (uint64_t)xer_ring->erst_ptr;
@@ -153,7 +153,7 @@ int init_xhc_event_ring(struct xhci_data *xhci_ptr)
     cache_force_write_back((void *)(uintptr_t) xer_ring->erst_ptr,
             sizeof(xhci_erst_entry_t));
     cache_force_write_back((void *)(uintptr_t) xer_ring->xer_enqueue_ptr,
-            XHCI_EVENT_RING_SEG_LENTH * sizeof(xhci_trb_t));
+            XHCI_EVENT_RING_SEG_LENGTH * sizeof(xhci_trb_t));
 
     INFO("Event Ring configured successfully");
     return 0;

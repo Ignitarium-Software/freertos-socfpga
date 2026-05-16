@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -10,8 +10,8 @@
 
 #include "osal.h"
 
-#define I3C_CORE_CLOCK    (200U * MHZ)                                /*200Mhz : i3c core clock source is 14_mp_clk
-                                                                         and according to Fig259 (TRM)14_mp_clk value is 200Mhz */
+#define I3C_CORE_CLOCK    (200U * MHZ)                                /* 200 MHz : i3c core clock source is 14_mp_clk
+                                                                         and according to Fig259 (TRM)14_mp_clk value is 200 MHz */
 
 
 #define I3C_MAX_DEVICES    (8U)
@@ -238,7 +238,7 @@ union i3c_cmd_arg {
 };
 
 /* command object used by the low level driver api to actually
-   transmit the command. THe structure reflects the master transfer
+   transmit the command. The structure reflects the master transfer
    command and address assignment command structures defined in the
    TRM section 5.8.6.5.7(Master command data structures)
  */
@@ -316,7 +316,7 @@ typedef void (*i3c_callback_t)(int stat,
  */
 struct i3c_driver_obj
 {
-    uint32_t reg_base;                              /* register blcok memory mapped address */
+    uint32_t reg_base;                              /* register block memory mapped address */
     uint32_t *dev_address_table;                     /* memory address for device address table */
     uint32_t *dev_char_table;                        /* memory address for device characteristic table */
 

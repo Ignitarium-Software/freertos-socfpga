@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -22,7 +22,7 @@
 #define XHCI_CR_CCS_FLAG             (1U)     /* !< xHCI command ring CCS flag */
 #define XHCI_EP_TR_RING_ALIGN        (16)     /* !< EP transfer ring alignment requirement */
 #define EP_TRB_SEG_LENGTH            (512U)    /* !< EP TR segment length */
-#define XHCI_EVENT_RING_SEG_LENTH    (512U)   /* !< Event Ring segment length */
+#define XHCI_EVENT_RING_SEG_LENGTH   (512U)   /* !< Event Ring segment length */
 #define START_XHCI                   (1U)     /* !< Start the xHCI controller */
 
 typedef enum
@@ -142,7 +142,7 @@ typedef struct xhci_oper_reg_params
  */
 struct ep_priv
 {
-    xhci_trb_t *ep_tr_enq_ptr;          /* !< TR enque pointer */
+    xhci_trb_t *ep_tr_enq_ptr;          /* !< TR enqueue pointer */
     usb_endpoint_descriptor_t ep_desc; /* !< endpoint descriptor */
     uint8_t pcs_flag;                   /* !< pcs flag for EP TR */
     uint8_t ep_addr;                    /* !< endpoint address */
@@ -189,7 +189,7 @@ struct xhci_data
     struct xhci_device_context_array *dcbaa; /* !< dcbaa pointer array */
 };
 
-/*
+/**
  * @brief  allocate xhci context memories
  * @param[in]  xhci_ptr -  reference of xhci hcd controller
  * @return
@@ -198,20 +198,20 @@ struct xhci_data
  */
 int alloc_xhci_contexts(struct xhci_data *xhci_ptr);
 
-/*
+/**
  * @brief  update the output device context entry for the corresponding device
  * slot id
  * @param[in] xhci_ptr : reference to xhci hcd structure
  */
 void update_dcbaa_entry(struct xhci_data *xhci_ptr);
 
-/*
+/**
  * @brief  deallocate xhci context memories
  * @param[in]  xhci_ptr -  reference of xhci hcd controller
  */
 void deallocate_xhci_context(struct xhci_data *xhci_ptr);
 
-/*
+/**
  * @brief  allocate xhci input context
  * @param[in]  xhci_ptr -  reference of xhci hcd controller
  * @return
@@ -220,7 +220,7 @@ void deallocate_xhci_context(struct xhci_data *xhci_ptr);
  */
 int alloc_input_device_context(struct xhci_data *xhci_ptr);
 
-/*
+/**
  * @brief : allocate xhci output device context
  * @param[in]  xhci_ptr -  reference of xhci hcd controller
  * @return
@@ -229,30 +229,32 @@ int alloc_input_device_context(struct xhci_data *xhci_ptr);
  */
 int alloc_output_device_context(struct xhci_data *xhci_ptr);
 
-/*
+/**
  * @brief initialize input device context data structure
  * @param[in]  xhci -  reference of xhci hcd controller
+ * @return
  *  0, on successful allocation
  *  errno, incase of failure
  */
 int init_input_device_context(struct xhci_data *xhci_ptr);
 
-/*
+/**
  * @brief allocate xhci device context base address array and store the base
  *         address array into DCBAA register
  * @param[in]  xhci_ptr -  reference of xhci hcd controller
+ * @return
  *  0, on successful allocation
  *  errno, incase of failure
  */
 int alloc_dcbaa(struct xhci_data *xhci_ptr);
 
-/*
+/**
  * @brief update xhci slot context data structure
  * @param[in]  xhci_ptr -  reference of xhci hcd controller
  */
 void update_xhc_slot_context(struct xhci_data *xhci_ptr);
 
-/*
+/**
  * @brief  initialize endpoint context data structure
  * @param[in]  xhci -  reference of xhci hcd controller
  * @param[in]  ep_type -  endpoint type  (bulk, control etc)
@@ -262,7 +264,7 @@ void update_xhc_slot_context(struct xhci_data *xhci_ptr);
  */
 void init_xhc_endpoint_context(struct xhci_data *xhci, xhci_ep_type_t ep_type);
 
-/*
+/**
  * @brief  return the device address from the output context data structure
  * @param[in]  xhci -  reference of xhci hcd controller
  * @return device address
@@ -271,23 +273,23 @@ uint8_t get_xhc_device_address(struct xhci_data *xhci_ptr);
 
 /*XHCI capability register APIs*/
 
-/*
+/**
  * @brief  function to return the operational register parameters of xhci
  *        controller
  * @return operational register parameters
  */
 xhci_oper_reg_params_t get_xhci_op_registers(void);
 
-/*
- * @brief  funtion to get the xhci capability parameters controller
+/**
+ * @brief  function to get the xhci capability parameters controller
  * @param[in]  xhci -  reference of xhci hcd controller
  * @return
- *  0, if operaiton is successful
+ *  0, if operation is successful
  *  errno, on failure
  */
 int get_xhc_cap_params(struct xhci_data *xhci);
 
-/*
+/**
  * @brief  function to check if the pointer address passed is byte aligned
  * @param[in]  ptr -  reference to xhci strucute
  * @return
@@ -296,8 +298,10 @@ int get_xhc_cap_params(struct xhci_data *xhci);
  */
 int init_xhc_event_ring(struct xhci_data *xhci_ptr);
 
-/*
+/**
+ * @brief Initialize xHCI context parameters.
  * @param[in] xhci_ptr reference xhci data structure
+ * @return
  *  0, on successful allocation
  *  errno, incase of failure
  */
@@ -305,7 +309,7 @@ int init_xhci_context_params(struct xhci_data *xhci_ptr);
 
 /* Generic xhci APIS */
 
-/*
+/**
  * @brief  function to check if the pointer address passed is byte aligned
  * @param[in]  ptr -  pointer to be checked byte aligned or not
  * @param[in]  byte - pointer byte alignment size
@@ -315,7 +319,7 @@ int init_xhci_context_params(struct xhci_data *xhci_ptr);
  */
 int is_ptr_mem_aligned(uint64_t addr, uint32_t byte);
 
-/*
+/**
  * @brief  parse the endpoint descriptors
  * @param[in] xhci_ptr reference to xhci hcd structure
  * @param[in] desc endpoint descriptor
@@ -327,25 +331,28 @@ int is_ptr_mem_aligned(uint64_t addr, uint32_t byte);
 int xhci_parse_endpoint_descriptor(struct xhci_data *xhci_ptr,
         usb_endpoint_descriptor_t *desc);
 
-/*
+/**
  * @brief Display device info
  */
 void display_xhci_device_params(struct xhci_device_data *dev_data);
 
-/*
+/**
  * @brief  reset the xHCI controller
+ * @return
+ *  0, on success
+ *  errno, on failure
  */
 int xhci_reset(void);
 
-/*
+/**
  * @brief  start the xHCI controller
  */
 void start_xhci_controller(void);
 
-/*
+/**
  * @brief Initialize the xHCI registers
  * @return
- *  true on successful initization
+ *  true on successful initialization
  *  false incase of failure
  */
 bool xhci_init(struct xhci_data *xhci);

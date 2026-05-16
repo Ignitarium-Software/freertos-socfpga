@@ -6,8 +6,8 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../common/download_dep.cmake)
 
 include(FetchContent)
 
-set(FREERTOS_FATFS n)
-set(FREERTOS_USB n)
+set(FREERTOS_FATFS y)
+set(FREERTOS_USB y)
 set(FREERTOS_TCPIP n)
 set(FREERTOS_LIBRSU n)
 set(FREERTOS_LIBFCS n)
@@ -46,6 +46,12 @@ file(GLOB SAMPLE_SRCS ./*.c)
 # sources
 target_sources(${PROJECT_NAME}.elf
     PRIVATE main.c ${SAMPLE_SRCS}
+    ${freertos_SOURCE_DIR}/samples/common/socfpga_mmc.c
+)
+
+target_include_directories(${PROJECT_NAME}.elf
+    PRIVATE
+    ${freertos_SOURCE_DIR}/samples/common/
 )
 
 # specify linker script

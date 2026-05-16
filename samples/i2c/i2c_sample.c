@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -55,14 +55,14 @@
 #define MEM_ADDR    0x0000
 
 /* Memory address size */
-#define MEM_ADDR_SZ    2
+#define MEM_ADDR_SZ    2U
 
 /* Bytes used in one transfer */
-#define NUM_TEST_BYTES    32
+#define NUM_TEST_BYTES  32U
 
 /* Buffers */
-uint8_t wbuf[MEM_ADDR_SZ + NUM_TEST_BYTES];
-uint8_t rbuf[NUM_TEST_BYTES];
+static uint8_t wbuf[MEM_ADDR_SZ + NUM_TEST_BYTES];
+static uint8_t rbuf[NUM_TEST_BYTES];
 
 /**
  * @brief fill the buffer with an incremental pattern
@@ -134,7 +134,7 @@ void i2c_task(void)
         return;
     }
 
-    /* set the slave address */
+    /* set slave address */
     slave_addr = DEV_ADDR;
     retval = i2c_ioctl(handle, I2C_SET_SLAVE_ADDR, (void *)(&slave_addr));
     if (retval != 0)
@@ -149,13 +149,11 @@ void i2c_task(void)
 
     PRINT("Performing EEPROM write, read and verify");
 
-    /* Write the test bytes into EEPROM */
-
+    /* Write test bytes into EEPROM */
     /* First two bytes of the write buffer is the memory address in EEPROM */
     wbuf[0] = (uint8_t)((MEM_ADDR >> 8) & 0xFF);
     wbuf[1] = (uint8_t)(MEM_ADDR & 0xFF);
 
-    /* Add the test bytes */
     fill_buf((wbuf + 2), NUM_TEST_BYTES, 0x10);
 
     /* Program the EEPROM with the pattern */
@@ -168,8 +166,10 @@ void i2c_task(void)
         return;
     }
 
+    PRINT("I2C write successful");
+
     /* EEPROM may need a small delay between back to back write */
-    osal_task_delay(10);
+    osal_task_delay(20);
 
     /* Read back from the EEPROM */
 

@@ -1,9 +1,9 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
- * This contains the register defintions for SoC FPGA system manager
+ * This contains the register definitions for SoC FPGA system manager
  */
 
 

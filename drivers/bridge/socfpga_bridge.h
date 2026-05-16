@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -48,7 +48,7 @@
 /**
  * @brief   enables the hps2fpga bridge
  *          The application should call this api to enable the HPS2FPGA bridge
- *          before any bridge opreation is being performed.
+ *          before any bridge operation is performed.
  *
  * @return
  * - 0:     if bridge enable operation is successful
@@ -67,11 +67,11 @@ int32_t enable_hps2fpga_bridge(void);
 int32_t disable_hps2fpga_bridge(void);
 
 /**
- * @brief  The api enabled the l2hps2fpga bridge.
+ * @brief  The api enabled the lwhps2fpga bridge.
  *
  * @return
- * - 0:    if l2hps2fpga bridge is enabled successfully
- * - EIO:  if bridge enable operation is unsuccessful
+ * - 0:    if lwhps2fpga bridge is enabled successfully
+ * - -EIO: if bridge enable operation is unsuccessful
  */
 int32_t enable_lwhps2fpga_bridge(void);
 
@@ -79,8 +79,8 @@ int32_t enable_lwhps2fpga_bridge(void);
  * @brief  The api disables the lwhps2fpga bridge
  *
  * @return
- * - 0:    if l2hps2fpga bridge is disabled successfully
- * - EIO:  if bridge enable operation is unsuccessful
+ * - 0:    if lwhps2fpga bridge is disabled successfully
+ * - -EIO: if bridge enable operation is unsuccessful
  */
 int32_t disable_lwhps2fpga_bridge(void);
 
@@ -94,7 +94,7 @@ int32_t disable_lwhps2fpga_bridge(void);
 int32_t enable_fpga2hps_bridge(void);
 
 /**
- * @brief  The api disbles the fpga2hps bridge
+ * @brief  The api disables the fpga2hps bridge
  *
  * @return
  * - 0:     if bridge disable operation is successful
@@ -112,7 +112,7 @@ int32_t disable_fpga2hps_bridge(void);
 int32_t enable_fpga2sdram_bridge(void);
 
 /**
- * @brief  The api disbles the fpga2sdram bridge
+ * @brief  The api disables the fpga2sdram bridge
  * @return
  * -  0:     if bridge disable operation is successful
  * - -EIO:  if bridge disable operation is unsuccessful

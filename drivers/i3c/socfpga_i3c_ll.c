@@ -68,6 +68,7 @@ static uint16_t push_data_to_tx_fifo(uint8_t instance, uint8_t *data,
     tx_empty_loc = (tx_empty_loc &
             I3C_DATA_BUFFER_STATUS_LEVEL_TX_BUF_EMPTY_LOC_MASK) >>
             I3C_DATA_BUFFER_STATUS_LEVEL_TX_BUF_EMPTY_LOC_POS;
+    tx_empty_loc *= RX_TX_DATA_PORT_SIZE;
 
     /*The writable data is the minimum of the data length
      * or the tx empty locations
@@ -538,7 +539,7 @@ void i3c_ll_init(uint8_t instance)
     HAL_REG_WRITE_FIELD(PER1MODRST, bitpos, mask, 0U);
 
     /* delay for clearing the mod reset*/
-    for (int i = 0; i < 1000000; i++)
+    for (volatile int i = 0; i < 1000000; i++)
     {
 
     }

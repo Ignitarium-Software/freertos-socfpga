@@ -9,6 +9,11 @@ endif()
 add_library(socfpga_drivers OBJECT)
 target_sources(socfpga_drivers PRIVATE)
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(socfpga_drivers PRIVATE ${DEFAULT_C_FLAGS_DEBUG})
+else()
+    target_compile_options(socfpga_drivers PRIVATE ${DEFAULT_C_FLAGS_RELEASE})
+endif()
 target_link_libraries(socfpga_drivers freertos_kernel)
 
 add_subdirectory(common)

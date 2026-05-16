@@ -1,6 +1,6 @@
 #include <errno.h>
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -40,6 +40,12 @@
  * @defgroup sdm_mbox_structs Structures
  * @ingroup sdm_mbox
  * SDM Mailbox Specific Structures
+ */
+
+/**
+ * @defgroup sdm_mbox_macros Macros
+ * @ingroup sdm_mbox
+ * SDM Mailbox Specific Macros
  */
 
 #include <stdint.h>

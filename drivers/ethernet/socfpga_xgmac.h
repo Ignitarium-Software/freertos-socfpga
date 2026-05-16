@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT
  *
@@ -84,8 +84,8 @@ extern "C"
 #define XGMAC_PHY_TYPE_RGMII    1     /*!< PHY type - RGMII */
 
 /*!< Descriptor configuration */
-#define XGMAC_NUM_RX_DESC        512     /*!< Number of TX descriptors */
-#define XGMAC_NUM_TX_DESC        512     /*!< Number of RX descriptors */
+#define XGMAC_NUM_RX_DESC        512     /*!< Number of RX descriptors */
+#define XGMAC_NUM_TX_DESC        512     /*!< Number of TX descriptors */
 #define XGMAC_PACKET_SIZE        1536U            /*!< Standard Ethernet packet size */
 #define XGMAC_DMA_ALIGN_BYTES    64U             /*!< DMA alignment size in bytes */
 #define XGMAC_MAX_PACKET_SIZE    (XGMAC_PACKET_SIZE + XGMAC_DMA_ALIGN_BYTES)            /*!< Max packet size including alignment */
@@ -266,9 +266,6 @@ int32_t xgmac_emac_start(xgmac_handle_t hxgmac);
  *
  * @param[in] hxgmac The instance of the XGMAC to stop.
  *
- * @return
- * - 0: on XGMAC successfully stop operation.
- *
  */
 void xgmac_emac_stop(xgmac_handle_t hxgmac);
 
@@ -278,7 +275,7 @@ void xgmac_emac_stop(xgmac_handle_t hxgmac);
  * The application should call this function to set the callback is guaranteed to be invoked
  * when an interrupt occurs.
  *
- * @param[in] hxgmac The instance of the XGMAC to stop.
+ * @param[in] hxgmac The instance of the XGMAC to set the callback for.
  * @param[in] callback The callback function to be called
  * on completion of an operation.
  * @param[in] pcntxt The user context pointer to be
@@ -379,7 +376,7 @@ int32_t xgmac_dma_tx_done(xgmac_handle_t hxgmac, uint8_t **release_buffer);
 /**
  * @brief Initiate the receive of the buffer via DMA.
  *
- * The application should call this once the data is ready to be recevied in the dma fifo.
+ * The application should call this once the data is ready to be received in the dma fifo.
  *
  * @param[in]  hxgmac    The instance of the XGMAC to stop.
  * @param[out] dma_rx_buf The structure to buffer descriptor. It contains the

@@ -1,3 +1,14 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
+ *
+ * SPDX-License-Identifier: MIT-0
+ */
+
+/**
+ * @file socfpga_usb_otg_reg.h
+ * @brief SoC FPGA USB OTG register map
+ */
+
 #ifndef SOCFPGA_USB_OTG_REG
 #define SOCFPGA_USB_OTG_REG
 

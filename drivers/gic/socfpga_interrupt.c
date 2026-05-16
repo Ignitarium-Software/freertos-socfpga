@@ -8,8 +8,8 @@
 
 
 #include "socfpga_interrupt.h"
-#include "socfpga_gic.h"
-#include "socfpga_gic_reg.h"
+#include "arm_gic.h"
+#include "arm_gic_reg.h"
 #include "osal_log.h"
 
 #define AGX5_DIST_BASE_ADDR    (0x1D000000)

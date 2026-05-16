@@ -113,8 +113,13 @@ TU_ATTR_ALWAYS_INLINE static inline bool osal_task_create(
         osal_task_routine_t routine, const char *const name,
         void *const argument, int priority )
 {
-    return xTaskCreate(routine, name, OSAL_TASK_STACK_SIZE, argument, priority,
-            NULL);
+    BaseType_t ret = xTaskCreate(routine, name, OSAL_TASK_STACK_SIZE, argument,
+            priority, NULL);
+    if (ret <= 0)
+    {
+        return pdFALSE;
+    }
+    return pdTRUE;
 }
 
 TU_ATTR_ALWAYS_INLINE static inline uint64_t _osal_ms2tick( uint64_t msec )
@@ -317,6 +322,16 @@ TU_ATTR_ALWAYS_INLINE static inline osal_pipe_t osal_pipe_create(uint32_t stream
                             osal_pipe_cb_t read_cb, osal_pipe_cb_t write_cb)
 {
     return xStreamBufferCreateWithCallback(stream_size, 1, write_cb, read_cb);
+}
+
+TU_ATTR_ALWAYS_INLINE static inline bool osal_pipe_delete(osal_pipe_t phndl)
+{
+    if (phndl == NULL)
+    {
+        return false;
+    }
+    vStreamBufferDelete(phndl);
+    return true;
 }
 
 TU_ATTR_ALWAYS_INLINE static inline uint32_t osal_pipe_send(osal_pipe_t phndl, uint8_t * data, uint32_t size)

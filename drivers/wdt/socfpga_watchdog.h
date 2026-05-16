@@ -1,7 +1,7 @@
 /*
  * Common IO - basic V1.0.0
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * Copyright (C) 2025 Altera Corporation
+ * Copyright (C) 2025-2026 Altera Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -40,7 +40,7 @@
  * @defgroup wdt Watchdog Timer
  * @ingroup drivers
  * @brief APIs for SoC FPGA Watchdog Timer.
- * @brief This is the Watchdog Timer block implementation for SoC FPGA.
+ * @details This is the Watchdog Timer block implementation for SoC FPGA.
  * It provides APIs for configuring the Watchdog Timer,
  * setting the bark and bite time, and starting or stopping the timer.
  * For example usage, refer to
@@ -238,10 +238,6 @@ int32_t wdt_restart(const wdt_handle_t hwdt);
  * @param[in] callback The callback function to be called.
  * @param[in] param    The user context to be passed when callback is called.
  *
- * @return
- * - 0: on success
- * - -EINVAL:  if hwdt is NULL
- * - -ENODATA: if configuration is not dine
  */
 void wdt_set_callback(const wdt_handle_t hwdt, wdt_callback_t callback,
         void *param);

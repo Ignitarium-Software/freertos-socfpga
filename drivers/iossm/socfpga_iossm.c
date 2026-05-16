@@ -16,7 +16,7 @@
 #include "osal_log.h"
 #include "osal.h"
 
-#define USE_DUAL_INSTANCE     0
+#define CFG_USE_DUAL_INSTANCE   0
 #define IOSSM_NUM_INSTANCE    2
 
 static void *error_inj_mem_sb = NULL;
@@ -34,7 +34,7 @@ iossm_context_t *iossm_open(uint32_t instance)
     iossm_context_t *iossm_handle;
 
 
-    if (instance > IOSSM_INSTANCE_1)
+    if (instance >= IOSSM_NUM_INSTANCE)
     {
         ERROR("Invalid instance");
         return NULL;
@@ -68,7 +68,7 @@ iossm_context_t *iossm_open(uint32_t instance)
     /*send command to get the interface id and ip_type*/
     resp_data = iossm_send_command(&iossm_desc, GET_SYS_INFO, NO_PARAM);
 
- #if USE_DUAL_INSTANCE
+ #if CFG_USE_DUAL_INSTANCE
     if ((resp_data.resp0 & 0x1FFFFFFFU) != 1U)
     {
         if ((resp_data.resp1 & 0x1FFFFFFFU) == 1U)
@@ -358,7 +358,7 @@ void iossm_set_callback(iossm_context_t *xhandle, iossm_cb_handler_t call_back_f
 
 int32_t iossm_close(uint32_t instance)
 {
-    if (instance > 1U)
+    if (instance >= IOSSM_NUM_INSTANCE)
     {
         ERROR("Invalid instance");
         return -EINVAL;

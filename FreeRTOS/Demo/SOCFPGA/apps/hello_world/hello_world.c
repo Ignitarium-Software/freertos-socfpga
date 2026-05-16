@@ -11,7 +11,7 @@
 #include "task.h"
 #include "socfpga_console.h"
 #include "socfpga_interrupt.h"
-#include "socfpga_gic_reg.h"
+#include "arm_gic_reg.h"
 #include "socfpga_interrupt.h"
 #include "socfpga_cache.h"
 #include "portmacro.h"

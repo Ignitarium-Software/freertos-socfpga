@@ -64,8 +64,7 @@ extern struct i3c_driver_obj i3c_obj[I3C_NUM_INSTANCES];
  * @param[in] address   Address for which the status is inquired.
  * @return uint8_t      Entry in the location corresponding to the address.
  */
-static uint32_t get_address_allotment_table_entry(uint8_t instance, uint8_t
-        address)
+static uint32_t get_address_allotment_table_entry(uint8_t instance, uint8_t address)
 {
     uint8_t idx, bit_index;
     uint32_t status;
@@ -94,7 +93,7 @@ static uint8_t get_next_free_address_allotment_table_entry(uint8_t instance)
 
     for (addr = 8U; addr < I3C_MAX_ADDR; addr++)
     {
-        if (get_address_allotment_table_entry (instance, addr) ==
+        if (get_address_allotment_table_entry(instance, addr) ==
                 ADDRESS_ENTRY_STATUS_FREE)
         {
             break;
@@ -165,7 +164,7 @@ static uint8_t i3c_prepare_address(uint8_t instance,
     if (pdevice->static_address != 0U)
     {
         if (get_address_allotment_table_entry(instance,
-                pdevice->static_address) == ADDRESS_ENTRY_STATUS_FREE)
+                    pdevice->static_address) == ADDRESS_ENTRY_STATUS_FREE)
         {
             initial_address = pdevice->static_address;
         }
@@ -324,6 +323,8 @@ static int32_t i3c_add_devices(uint8_t instance, struct i3c_dev_list *pdev_list)
 {
     int32_t ret = 0;
     uint8_t dev_idx, i;
+    uint8_t desc_idx;
+    struct i3c_device_desc *pdevice_desc;
 
     if ((instance > I3C_NUM_INSTANCES) || (pdev_list == NULL))
     {
@@ -335,9 +336,10 @@ static int32_t i3c_add_devices(uint8_t instance, struct i3c_dev_list *pdev_list)
             dev_idx++)
     {
         struct i3c_i3c_device *pdevice = &pdev_list->list[dev_idx];
+        desc_idx = i3c_obj[instance].num_dev;
 
         /* verify if the device is already attached to the controller*/
-        for (i = 0; i < i3c_obj[instance].num_dev; i++)
+        for (i = 0; i < desc_idx; i++)
         {
             /* Device ID is zero  means that it is a legacy I2C device*/
             if (i3c_obj[instance].i3c_dev_desc_list[i].device.device_id == 0U)
@@ -360,23 +362,17 @@ static int32_t i3c_add_devices(uint8_t instance, struct i3c_dev_list *pdev_list)
             }
         }
         /* add the device to the attached list if it is a new device*/
-        if (i >= i3c_obj[instance].num_dev)
+        if (i >= desc_idx)
         {
+            pdevice_desc = &i3c_obj[instance].i3c_dev_desc_list[desc_idx];
 
             /*Add the device to the attached device list in the controller object*/
-            (void)memcpy(
-                    (void *)&i3c_obj[instance].i3c_dev_desc_list[i3c_obj[
-                        instance
-                    ].
-                    num_dev].device, pdevice, sizeof(struct i3c_i3c_device));
+            (void)memcpy(&pdevice_desc->device, pdevice, sizeof(*pdevice));
             i3c_obj[instance].num_dev++;
 
             /*Mark the address as taken in the address allotment table for I2C devices (Done inside the attach function)*/
             if (pdevice->device_id == 0U)
             {
-                struct i3c_device_desc *pdevice_desc =
-                        &i3c_obj[instance].i3c_dev_desc_list[i3c_obj[instance].
-                                num_dev];
                 ret = i3c_attach_i2c_device(instance, pdevice_desc,
                         pdevice->static_address);
             }
@@ -722,6 +718,12 @@ int32_t i3c_open(uint8_t instance)
     i3c_obj[instance].lock = osal_semaphore_create(
             &(i3c_obj[instance].lock_mem));
 
+    if ((i3c_obj[instance].xfer_complete == NULL) ||
+                (i3c_obj[instance].lock == NULL))
+    {
+        return -ENOMEM;
+    }
+
     if (i3c_assign_own_da(instance) != 0)
     {
         return -EBUSY;
@@ -851,6 +853,7 @@ int32_t i3c_transfer_sync(uint8_t instance, uint8_t address,
                 num_xfers /* number of commands*/, is_i2c, is_async);
         if (ret != 0)
         {
+            i3c_obj[instance].is_busy = false;
             ERROR("Data Transfer failed");
             return -EIO;
         }
@@ -929,6 +932,7 @@ int32_t i3c_transfer_async(uint8_t instance, uint8_t address,
                 num_xfers, is_i2c, is_async);
         if (ret != 0)
         {
+            i3c_obj[instance].is_busy = false;
             ERROR("Data Transfer failed");
             return -EIO;
         }

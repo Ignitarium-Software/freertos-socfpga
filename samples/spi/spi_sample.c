@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -12,6 +12,8 @@
  */
 
 #include <string.h>
+#include <stdio.h>
+#include <errno.h>
 #include "FreeRTOS.h"
 #include "FreeRTOSConfig.h"
 #include "task.h"
@@ -35,10 +37,12 @@
  *
  * @section spi_param Configurable Parameters
  * - SPI instance can be configured in @c SPI_INSTANCE macro.
- * - The memory address to write and read back can be configured in @c EEPROM_ADDRESS macro.
- * - The number of bytes to transfer can be configured in @c TRANSFER_SIZE macro.
+ * - The memory address to write and read back can be configured in
+ *   @c EEPROM_ADDR macro.
+ * - The number of bytes to transfer can be configured in @c XFER_SIZE
+ *   macro.
  * - Slave select can be configured in @c SLAVE_SELECT_NUM macro.
- * @note Ensure the instance and slave select are valid. <br>
+ * @note Ensure the instance and slave select are valid.
  * The EEPROM commands and address can vary depending on the EEPROM used.
  *
  * @section spi_how_to How to Run
@@ -47,9 +51,11 @@
  * 3. Observe the UART terminal for status messages.
  *
  * @section spi_result Expected Results
- * - The application sends the Write Enable and Write commands to store data in EEPROM.
+ * - The application sends the Write Enable and Write commands to store data in
+ *   EEPROM.
  * - It then reads the data back using the Read command.
- * - The read and written data are compared, and a success message is printed on match.
+ * - The read and written data are compared, and a success message is printed
+ *   on match.
  */
 
 /**
@@ -69,8 +75,9 @@
  * The EEPROM page size is 64 bytes.
  * Valid address range is 0x00 to 0x3FFF.
  */
-#define EEPROM_ADDRESS       0x2780
-#define TRANSFER_SIZE        24
+#define EEPROM_ADDR          0x2780
+#define EEPROM_PAGE_SIZE     64U
+#define XFER_SIZE            97U
 
 /**
  * Configurable parameters for SPI controller
@@ -78,25 +85,48 @@
 #define SPI_INSTANCE         0
 #define SLAVE_SELECT_NUM     1
 #define SPI_FREQ             500000U
-
 spi_handle_t spi_handle;
-uint8_t dummyBuf[10] = { 0 };
+
+static uint32_t min_size(uint32_t a, uint32_t b)
+{
+    return (a < b) ? a : b;
+}
+
+static void print_buf(const char *label, const uint8_t *buf, uint32_t len)
+{
+    uint32_t i;
+
+    if (label != NULL)
+    {
+        PRINT("%s", label);
+    }
+
+    for (i = 0; i < len; i++)
+    {
+        printf(" 0x%02x ", buf[i]);
+        if (((i + 1U) % 16U) == 0U)
+        {
+            printf("\r\n");
+        }
+    }
+    printf("\r\n");
+}
 
 /**
  * @brief Send Write Enable command to EEPROM
  *
  * Write enable command should be sent before any write operation.
  */
-int32_t eeprom_enable_write()
+static int32_t eeprom_enable_write(void)
 {
     uint8_t cmd = EEPROM_WR_ENABLE;
 
-    if (spi_transfer_sync(spi_handle, &cmd, NULL, 1) != 0)
+    if (spi_xfer_sync(spi_handle, &cmd, NULL, 1) != 0)
     {
-        return 0;
+        return -EIO;
     }
 
-    return 1;
+    return 0;
 }
 
 /**
@@ -107,13 +137,18 @@ static int32_t eeprom_read_status(uint8_t *status)
     uint8_t cmd[2] = { EEPROM_RD_SR, 0x00 };
     uint8_t rx[2] = { 0 };
 
-    if ((status == NULL) || (spi_transfer_sync(spi_handle, cmd, rx, 2) != 0))
+    if (status == NULL)
     {
-        return 0;
+        return -EINVAL;
+    }
+
+    if (spi_xfer_sync(spi_handle, cmd, rx, 2) != 0)
+    {
+        return -EIO;
     }
 
     *status = rx[1];
-    return 1;
+    return 0;
 }
 
 /**
@@ -123,23 +158,26 @@ static int32_t eeprom_wait_ready(void)
 {
     uint8_t status = 0;
     uint64_t delay_ticks = 5;
+    uint32_t i;
+    int32_t ret;
 
-    for (uint32_t i = 0; i < EEPROM_WIP_TIMEOUT_MS; i++)
+    for (i = 0; i < EEPROM_WIP_TIMEOUT_MS; i++)
     {
-        if (eeprom_read_status(&status) != 1)
+        ret = eeprom_read_status(&status);
+        if (ret != 0)
         {
-            return 0;
+            return ret;
         }
 
         if ((status & EEPROM_WIP_MASK) == 0U)
         {
-            return 1;
+            return 0;
         }
 
         osal_delay_ms(delay_ticks);
     }
 
-    return 0;
+    return -ETIMEDOUT;
 }
 
 /**
@@ -149,38 +187,64 @@ static int32_t eeprom_wait_ready(void)
  * writing more than one page at a time will result in wrapping around
  * and overwriting the previous data.
  */
-int32_t eeprom_write(uint8_t *buf, size_t size, uint16_t mem_add)
+static int32_t eeprom_write_page(const uint8_t *buf, uint32_t size,
+        uint16_t mem_addr)
 {
-    uint8_t cmd[150] = { 0 };
-    uint8_t rx_count = 0, i = 0;
+    uint8_t cmd[EEPROM_PAGE_SIZE + 3] = { 0 };
+    uint32_t i;
+    int32_t ret;
 
-    if (eeprom_enable_write() != 1)
+    if (size > EEPROM_PAGE_SIZE)
     {
-        return 0;
+        return -EINVAL;
+    }
+
+    ret = eeprom_enable_write();
+    if (ret != 0)
+    {
+        return ret;
     }
 
     cmd[0] = EEPROM_WRITE;
-    cmd[1] = (mem_add >> 8) & 0xFF;
-    cmd[2] = mem_add & 0xFF;
+    cmd[1] = (mem_addr >> 8) & 0xFF;
+    cmd[2] = mem_addr & 0xFF;
 
     for (i = 0; i < size; i++)
     {
         cmd[i + 3] = buf[i];
     }
 
-    rx_count = size + 3;
     /* For write operations using transfer the rxbuf is NULL */
-    if (spi_transfer_sync(spi_handle, cmd, NULL,  rx_count) != 0)
+    if (spi_xfer_sync(spi_handle, cmd, NULL, (uint16_t)(size + 3U)) != 0)
     {
-        return 0;
+        return -EIO;
     }
 
-    if (eeprom_wait_ready() != 1)
+    return eeprom_wait_ready();
+}
+
+static int32_t eeprom_write_buf(const uint8_t *buf, uint32_t size,
+        uint16_t mem_addr)
+{
+    uint32_t offset = 0;
+    int32_t ret;
+
+    while (offset < size)
     {
-        return 0;
+        uint32_t chunk;
+
+        chunk = min_size(EEPROM_PAGE_SIZE, size - offset);
+
+        ret = eeprom_write_page(&buf[offset], chunk,
+                (uint16_t)(mem_addr + offset));
+        if (ret != 0)
+        {
+            return ret;
+        }
+        offset += chunk;
     }
 
-    return 1;
+    return 0;
 }
 
 /**
@@ -188,15 +252,24 @@ int32_t eeprom_write(uint8_t *buf, size_t size, uint16_t mem_add)
  *
  * The read command is followed by address and dummy bytes.
  * The number of dummy bytes is equal to the number of bytes to be read.
- * The first three bytes of the read data will be dummy bytes and should be ignored.
+ * The first three bytes of the read data will be dummy bytes and should be
+ * ignored.
  */
-int32_t eeprom_read(uint8_t *buf, size_t size, uint16_t mem_add)
+static int32_t eeprom_read_chunk(uint8_t *buf, uint32_t size,
+        uint16_t mem_addr)
 {
-    uint32_t i = 0;
-    uint8_t cmd[40] = { 0 };
+    uint8_t cmd[EEPROM_PAGE_SIZE + 3] = { 0 };
+    uint8_t rx[EEPROM_PAGE_SIZE + 3] = { 0 };
+    uint32_t i;
+
+    if (size > EEPROM_PAGE_SIZE)
+    {
+        return -EINVAL;
+    }
+
     cmd[0] = EEPROM_READ;
-    cmd[1] = (mem_add >> 8) & 0xFF;
-    cmd[2] = mem_add & 0xFF;
+    cmd[1] = (mem_addr >> 8) & 0xFF;
+    cmd[2] = mem_addr & 0xFF;
 
     for (i = 0; i < size; i++)
     {
@@ -204,30 +277,57 @@ int32_t eeprom_read(uint8_t *buf, size_t size, uint16_t mem_add)
     }
 
     /* For read operations using transfer the txbuf contains dummy data */
-    if (spi_transfer_sync(spi_handle, cmd, buf, (size + 3)) != 0)
+    if (spi_xfer_sync(spi_handle, cmd, rx, (uint16_t)(size + 3U)) != 0)
     {
-        return 0;
+        return -EIO;
     }
-    return 1;
+
+    memcpy(buf, &rx[3], size);
+    return 0;
+}
+
+static int32_t eeprom_read_buf(uint8_t *buf, uint32_t size, uint16_t mem_addr)
+{
+    uint32_t offset = 0;
+    int32_t ret;
+
+    while (offset < size)
+    {
+        uint32_t chunk;
+
+        chunk = min_size(EEPROM_PAGE_SIZE, size - offset);
+
+        ret = eeprom_read_chunk(&buf[offset], chunk,
+                (uint16_t)(mem_addr + offset));
+        if (ret != 0)
+        {
+            return ret;
+        }
+        offset += chunk;
+    }
+
+    return 0;
 }
 
 void spi_task(void)
 {
-    uint8_t rd_buf[30] = { 0 };
-    uint8_t wr_buf[24] =
-    {
-        0x2, 0x21, 0x22, 0x23, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb,
-        0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17
-    };
+    uint8_t rd_buf[XFER_SIZE] = { 0 };
+    uint8_t wr_buf[XFER_SIZE] = { 0 };
 
     int32_t retval = 0;
     spi_cfg_t config;
+    int i;
 
-    /* SPI mode specifies the clock phase(CPH) and clock polarity(CPO)
-     * Mode0: CPH toggles in the middle of first bit and CPO is inactive when high
-     * Mode1: CPH toggles at the start of first bit and CPO is inactive when high
-     * Mode2: CPH toggles in the middle of first bit and CPO is inactive when low
-     * Mode3: CPH toggles at the start of first bit and CPO is inactive when low
+    /*
+     * SPI mode specifies the clock phase (CPH) and clock polarity (CPO)
+     * Mode0: CPH toggles in the middle of first bit and CPO is inactive when
+     *        high
+     * Mode1: CPH toggles at the start of first bit and CPO is inactive when
+     *        high
+     * Mode2: CPH toggles in the middle of first bit and CPO is inactive when
+     *        low
+     * Mode3: CPH toggles at the start of first bit and CPO is inactive when
+     *        low
      * The mode should match the EEPROM's SPI mode.
      * The EEPROM used in this sample application supports Mode 3.
      */
@@ -236,7 +336,7 @@ void spi_task(void)
 
     PRINT("Sample application to write and read EEPROM using SPI");
     PRINT("Configuring SPI Master...");
-    spi_handle = spi_open(0);
+    spi_handle = spi_open(SPI_INSTANCE);
     if (spi_handle == NULL)
     {
         ERROR("SPI instance cannot be open");
@@ -251,50 +351,38 @@ void spi_task(void)
     }
     PRINT("Done");
 
-    spi_select_slave(spi_handle, 1);
-    PRINT("Enabling write operation in EEPROM...");
-    retval = eeprom_enable_write();
-    if (retval != 1)
+    spi_select_slave(spi_handle, SLAVE_SELECT_NUM);
+
+    for (i = 0; i < (int)XFER_SIZE; i++)
+    {
+        wr_buf[i] = (uint8_t)(i & 0xFF);
+    }
+
+    print_buf("Write Data", wr_buf, XFER_SIZE);
+
+    PRINT("Writing %d bytes to EEPROM at address 0x%x...", XFER_SIZE,
+            EEPROM_ADDR);
+    retval = eeprom_write_buf(wr_buf, XFER_SIZE, EEPROM_ADDR);
+    if (retval != 0)
     {
         ERROR("Failed");
         return;
     }
     PRINT("Done");
 
-    PRINT("Write Data");
-    for (int i = 0; i < TRANSFER_SIZE; i++)
-    {
-        printf(" 0x%x ", wr_buf[i]);
-    }
-    printf("\r\n");
-
-    PRINT("Writing %d bytes to EEPROM at address 0x%x...", TRANSFER_SIZE,
-            EEPROM_ADDRESS);
-    retval = eeprom_write(wr_buf, TRANSFER_SIZE, EEPROM_ADDRESS);
-    if (retval != 1)
+    PRINT("Reading back %d bytes from EEPROM at address 0x%x...", XFER_SIZE,
+            EEPROM_ADDR);
+    retval = eeprom_read_buf(rd_buf, XFER_SIZE, EEPROM_ADDR);
+    if (retval != 0)
     {
         ERROR("Failed");
         return;
     }
     PRINT("Done");
 
-    PRINT("Reading back %d bytes from EEPROM at address 0x%x...", TRANSFER_SIZE,
-            EEPROM_ADDRESS);
-    retval = eeprom_read(rd_buf, TRANSFER_SIZE, EEPROM_ADDRESS);
-    if (retval != 1)
-    {
-        ERROR("Failed");
-    }
-    PRINT("Done");
+    print_buf("Read Data", rd_buf, XFER_SIZE);
 
-    PRINT("Read Data");
-    for (int i = 3; i < TRANSFER_SIZE + 3; i++)
-    {
-        printf(" 0x%x ", rd_buf[i]);
-    }
-    printf("\r\n");
-
-    retval = memcmp(wr_buf, &rd_buf[3], TRANSFER_SIZE);
+    retval = memcmp(wr_buf, rd_buf, XFER_SIZE);
     if (retval != 0)
     {
         ERROR("Comparison failed");

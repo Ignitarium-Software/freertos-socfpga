@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -8,17 +8,21 @@
 
 
 #include "socfpga_sip_handler.h"
+#include "socfpga_console.h"
 
-int smc_call(uint64_t function_id, uint64_t *register_val)
+int smc_call(uint64_t fn_id, uint64_t *reg_val)
 {
-    (void)function_id;
     int ret = 0;
 
     /*
-     * Load values into registers, function_id is already
-     * loaded into x0 register on function call
+     * Console writes can interleave with secure firmware UART output or
+     * transactions while one core is in EL3, producing corrupted logs.
+     * If the console semaphore was never created, locking is a no-op.
      */
+    (void)console_lock();
+
     asm volatile (
+        "mov x0, %1\n"
         "ldr x1, [%0]\n"
         "ldr x2, [%0, #8]\n"
         "ldr x3, [%0, #16]\n"
@@ -30,15 +34,13 @@ int smc_call(uint64_t function_id, uint64_t *register_val)
         "ldr x9, [%0, #64]\n"
         "ldr x10, [%0, #72]\n"
         "ldr x11, [%0, #80]\n"
+        "smc     #0\n"
         :
-        : "r" (register_val)
+        : "r" (reg_val), "r" (fn_id)
         : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8",
         "x9", "x10", "x11");
 
-    /*Perform the SMC call*/
-    asm volatile ("smc     #0\n");
-
-    /*Store response values in the registers to reg_values*/
+    /* Return the secure monitor response register values to caller. */
     asm volatile (
         "str x0, %0\n"
         "str x1, [%1]\n"
@@ -53,10 +55,11 @@ int smc_call(uint64_t function_id, uint64_t *register_val)
         "str x10, [%1, #72]\n"
         "str x11, [%1, #80]\n"
         : "=m" (ret)
-        : "r" (register_val)
+        : "r" (reg_val)
         : "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8",
         "x9", "x10", "x11");
 
+    (void)console_unlock();
+
     return ret;
 }
-

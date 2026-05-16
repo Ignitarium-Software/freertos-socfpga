@@ -1,7 +1,7 @@
 /*
  * Common IO - basic V1.0.0
  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * Copyright (C) 2025 Altera Corporation
+ * Copyright (C) 2025-2026 Altera Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -77,8 +77,8 @@
  */
 #define GPIO_MAX_INSTANCE    (48U)     /*!< Number of GPIO pins supported. */
 #define GPIO_PINS_PER_REG    (24U)     /*!< Number of GPIO pins having same base address . */
-#define GPIO_INSTANCE1       (0U)  /*!< GPIO instance 0. */
-#define GPIO_INSTANCE0       (1U)   /*!< GPIO instance 1. */
+#define GPIO_INSTANCE1       (0U)  /*!< GPIO instance 1. */
+#define GPIO_INSTANCE0       (1U)   /*!< GPIO instance 0. */
 #define PINMUX_REG(p)                                                 \
 	(((p) < 40U) ?                                                    \
 	 (0x10D13000U + (4U * (p))) :                                     \

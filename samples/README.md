@@ -43,3 +43,11 @@ Build qspi image
 ```bash
 ninja -C <build-dir> qspi-image
 ```
+
+**2. Notes**
+
+**2.1 I2C DMA sample buffer requirements**
+
+For DMA-mode I2C samples, write buffers must be 32-bit DATA_CMD words with any
+required STOP/command bits already applied by the caller. DMA read buffers and
+all interrupt-mode buffers remain byte arrays.

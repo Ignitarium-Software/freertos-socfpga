@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -34,13 +34,13 @@
 
 /**
  * @defgroup ecc_fns Functions
- * @ingroup ECC
+ * @ingroup ecc
  * ECC HAL APIs
  */
 
 /**
  * @defgroup ecc_macros Macros
- * @ingroup ECC
+ * @ingroup ecc
  * ECC Specific Macros
  */
 
@@ -117,6 +117,8 @@ int ecc_enable_modules(uint32_t modules);
 /**
  * @brief  Used to set callback after processing a single bit error
  *
+ * @param[in] user_callback Callback invoked after SBE handling.
+ *
  * @return
  * - 0:       on success.
  * - -EINVAL: if invalid parameters are passed.
@@ -140,7 +142,7 @@ int ecc_get_sbe_error_count(uint32_t ecc_module);
  * @param[in]  ecc_module - ECC module id.
  *
  * @return
- * - >= 0:    on success, returns the single bit error count.
+ * - >= 0:    on success, returns the double bit error count.
  * - -EINVAL: if invalid parameters are passed.
  */
 int ecc_get_dbe_error_count(uint32_t ecc_module);

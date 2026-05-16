@@ -176,7 +176,7 @@ int _write( int file,
 {
     ( void ) file;
     int lock_recur_cnt = 0;
-    console_fill_buffer( ( unsigned char * const ) ptr, len );
+    int written = console_fill_buffer( ( unsigned char * const ) ptr, len );
 
     do
     {
@@ -190,7 +190,7 @@ int _write( int file,
         get_spin_lock(STDIO_LOCK_ID(PORT_STDLIB_SPIN_LOCK_STDOUT));
     }
 
-    return len;
+    return written;
 }
 /*-----------------------------------------------------------*/
 

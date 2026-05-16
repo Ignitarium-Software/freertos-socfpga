@@ -7,22 +7,22 @@
  */
 
 
-#ifndef __SOCFPGA_GIC_H__
-#define __SOCFPGA_GIC_H__
+#ifndef __ARM_GIC_H__
+#define __ARM_GIC_H__
 
 #include <stdint.h>
 
-#define REGISTER_SOCFPGA_DIST_BASE_ADDR      (0x1D000000U)
-#define REGISTER_SOCFPGA_RD_BASE_ADDR        (0x1D060000U)
+#define REGISTER_SOCFPGA_DIST_BASE_ADDR      0x1D000000U
+#define REGISTER_SOCFPGA_RD_BASE_ADDR        0x1D060000U
 
-#define GICV3_GROUP0                        (0U)
-#define GICV3_GROUP1_SECURE                 (1U)
-#define GICV3_GROUP1_NON_SECURE             (2U)
+#define GICV3_GROUP0                        0U
+#define GICV3_GROUP1_SECURE                 1U
+#define GICV3_GROUP1_NON_SECURE             2U
 
-#define GICV3_CONFIG_LEVEL                  (0U)
-#define GICV3_CONFIG_EDGE                   (2U)
-#define GICV3_ROUTE_MODE_ANY                (0x80000000U)
-#define GICV3_ROUTE_MODE_COORDINATE         (0U)
+#define GICV3_CONFIG_LEVEL                  0U
+#define GICV3_CONFIG_EDGE                   2U
+#define GICV3_ROUTE_MODE_ANY                0x80000000U
+#define GICV3_ROUTE_MODE_COORDINATE         0U
 
 /* Return macros */
 #define INTERRUPT_RETURN_SUCCESS             0
@@ -48,4 +48,4 @@ int32_t gic_clear_int_pending(uint32_t id, uint32_t rd);
 int32_t gic_set_int_pending( uint32_t id, uint32_t rd );
 
 void gic_enable_interrupts(void);
-#endif /* __SOCFPGA_GIC_H__ */
+#endif /* __ARM_GIC_H__ */

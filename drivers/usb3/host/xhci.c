@@ -56,12 +56,15 @@ int is_ptr_mem_aligned(uint64_t addr, uint32_t byte)
     return -EIO;
 }
 
-static int configure_xhci_max_slots(struct xhci_data *xhci)
+static int configure_xhci_max_slots(void)
 {
     volatile uint32_t config_reg_val;
+    uint32_t hcsparams1;
     uint32_t max_slots;
 
-    max_slots = xhci->xhc_cap_ptr->hcsparams1_params.max_dev_slots;
+    hcsparams1 = RD_REG32((USBBASE + USB3_HCSPARAMS1));
+    max_slots = (hcsparams1 & USB3_HCSPARAMS1_MAXSLOTS_MASK)
+            >> USB3_HCSPARAMS1_MAXSLOTS_POS;
 
     DEBUG("MaxSlots is : %x", max_slots);
 
@@ -169,7 +172,7 @@ bool xhci_init(struct xhci_data *xhci)
         return  false;
     }
 
-    configure_xhci_max_slots(xhci);
+    configure_xhci_max_slots();
 
     alloc_xhci_contexts(xhci);
 

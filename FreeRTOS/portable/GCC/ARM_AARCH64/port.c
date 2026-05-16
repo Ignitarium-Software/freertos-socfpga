@@ -35,7 +35,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#include "socfpga_gic_reg.h"
+#include "arm_gic_reg.h"
 #include "socfpga_interrupt.h"
 #ifndef configINTERRUPT_CONTROLLER_BASE_ADDRESS
     #error configINTERRUPT_CONTROLLER_BASE_ADDRESS must be defined.  See https: /*www.FreeRTOS.org/Using-FreeRTOS-on-Cortex-A-Embedded-Processors.html */
@@ -403,7 +403,7 @@ static void vCoreInit( uint32_t ulCoreId, void *pvEntryPoint )
 extern void _secondary_boot(void);
 BaseType_t xPortStartScheduler( void )
 {
-uint32_t ulAPSR = 0, ulCoreId = 0;
+    uint32_t ulAPSR = 0;
 
     #if ( configASSERT_DEFINED == 1 )
     {

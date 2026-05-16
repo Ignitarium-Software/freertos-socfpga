@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -93,7 +93,7 @@ typedef struct flash_handle *flash_handle_t;
 flash_handle_t flash_open(uint32_t flash_num);
 
 /**
- * @brief Obtain a flash descriptor.
+ * @brief Erase flash sectors.
  *
  * @param[in] flash_handle Flash handle.
  * @param[in] address Start address.
@@ -117,7 +117,7 @@ int flash_erase_sectors(flash_handle_t flash_handle, uint32_t address, uint32_t
  *
  * @return
  * - -EINVAL:    if invalid arguments are passed.
- * - -EBUSY:     if the device us in busy state.
+ * - -EBUSY:     if the device is in busy state.
  * - -ETIMEDOUT: if failed to get release lock or semaphore.
  * - -EIO:       if write operation failed.
  * - 0:          if operation succeeded.
@@ -153,7 +153,7 @@ int flash_read_sync(flash_handle_t flash_handle, uint32_t address,
  * @param[in] puser_context User defined context variable.
  *
  * @return
- * - -EINVAL: if invalid arguements are used.
+ * - -EINVAL: if invalid arguments are used.
  * - 0:       on success.
  */
 int flash_set_callback(flash_handle_t const flash_handle, flash_callback_t

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -112,7 +112,7 @@ struct i3c_i3c_device
     uint64_t device_id : 48;            /*!< 48 bit device provisioned ID.For i2c device mark it as zero*/
 
     uint8_t static_address;             /*!< static_address to be used for the target/device. If
-                                         * it is set to 0, controller should accessing a dynamic
+                                         * it is set to 0, controller should access a dynamic
                                          * address through the DAA scheme
                                          */
 
@@ -186,8 +186,6 @@ extern int32_t i3c_open(uint8_t instance);
  * @note I3C_IOCTL_DO_DAA: Perform the dynamic address assignment to the connected devices
  * which do not have static addresses.
  *
- * @note I3C_IOCTL_CONFIG_IBI: Enable/disable the slave in-bound interrupt.
- *
  * @param[in] instance Instance of the I3C controller.
  * @param[in] ioctl    IOCTL request.
  * @param[in] pargs    Pointer to the arguments for the IOCTL request.
@@ -205,7 +203,6 @@ extern int32_t i3c_ioctl(uint8_t instance, enum i3c_ioctl_request ioctl,
  * @param[in] instance  Instance of the I3C controller.
  * @param[in] callback  The callback to be registered.
  * @param[in] param    Parameters that are to be passed to the callback.
- * @return    NIL
  */
 extern void i3c_set_callback(uint8_t instance,
         i3c_callback_t callback, void *param);

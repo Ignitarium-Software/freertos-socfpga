@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -21,7 +21,7 @@
  * @details
  * The SEU driver provides APIs to inject and read SEU-safe errors, read SEU statistics
  * and insert ECC errors. The driver communicates with the SIP SVC subsystem using the
- * mbox_send_commad function to perform these operations.
+ * mbox_send_command function to perform these operations.
  * To see example usage, see @ref seu_sample "SEU sample application".
  * @{
  */
@@ -132,7 +132,7 @@ int32_t seu_init(void);
  * @brief Read SEU safe error data.
  *
  * @return
- * - A read_err_data handle with op_state set to 0 on success
+ * - A read_err_data_t struct with op_state set to 0 on success
  * - -EINVAL: if the mailbox client handle is invalid
  * - -EIO:    if the mailbox callback reception fails
  */
@@ -140,6 +140,8 @@ read_err_data_t seu_read_err(void);
 
 /**
  * @brief Read SEU safe error statistics.
+ *
+ * @param[in] sec_addr SEU sector address.
  *
  * @return
  * - A seu_stat handle with op_state set to 0 on success
