@@ -7,11 +7,13 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <errno.h>
 #include "socfpga_smmu.h"
 #include "socfpga_smmu_reg.h"
 #include "socfpga_cache.h"
 #include "socfpga_defines.h"
+#include "socfpga_platform.h"
 
 
 /*####### SDM VA -> PA Translation ######
@@ -90,7 +92,6 @@
 #define DISABLE_AF           0x1
 #define LVL_WALK_0           0x1
 #define VALID_DESC           0x1
-
 
 #define SMMU_OP_SUCCESS    0
 #define SMMU_OP_FAIL       -1
@@ -171,15 +172,19 @@ static void smmu_prepare_stream_table(uint8_t index)
     smmu_descriptors.stream_table[index].IMP_DEFINED_0 = 0xF;
     smmu_descriptors.stream_table[index].INSTCFG = 0x2;
 
-#ifndef AGILEX3
-    if ((index == 0xAU))
+    if (index == SMMU_STREAM_ID_SDM &&
+            socfpga_platform_get_variant() == PLAT_AGILEX5_REVA)
     {
-        smmu_descriptors.stream_table[index].Config = SMMU_EN_S1_TRANS;
-        smmu_descriptors.stream_table[index].S1ContextPtr =
-                (uint64_t)&smmu_descriptors.context_desc_512mb >> 6;
+        /*
+         * Due to hardware limitation in the Agilex 5 A0 silicon, SDM SMMU
+         * initialization requires enabling the address translation. For other
+         * platforms, this translation is not required.
+         */
+            smmu_descriptors.stream_table[index].Config = SMMU_EN_S1_TRANS;
+            smmu_descriptors.stream_table[index].S1ContextPtr =
+                    (uint64_t)&smmu_descriptors.context_desc_512mb >> 6;
     }
     else
-#endif
     {
         smmu_descriptors.stream_table[index].Config = SMMU_BYPASS_MODE;
         smmu_descriptors.stream_table[index].S1ContextPtr =

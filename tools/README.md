@@ -65,7 +65,7 @@ Download and install [Quartus]
 ## 2.4 Clone the ATF
 ```bash
   cd $TOP_FOLDER
-  git clone https://github.com/altera-fpga/arm-trusted-firmware.git -b socfpga_v2.13.0 arm-trusted-firmware
+  git clone https://github.com/altera-fpga/arm-trusted-firmware.git -b socfpga_v2.14.0 arm-trusted-firmware
 ```
 ## 2.5 Clone the SoC FPGA FreeRTOS SDK repo
 ```bash

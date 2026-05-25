@@ -7,7 +7,7 @@
 [submodule "tools/ATF"]
 	path = tools/ATF
 	url = https://github.com/altera-fpga/arm-trusted-firmware.git
-    branch = socfpga_v2.13.0
+	branch = socfpga_v2.14.0
 [submodule "fcs_lib/libfcs"]
 	path = fcs/libfcs
 	url = https://github.com/Ignitarium-Technology/libfcs.git
