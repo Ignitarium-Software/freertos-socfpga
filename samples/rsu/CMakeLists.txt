@@ -1,67 +1,18 @@
 cmake_minimum_required(VERSION 3.5...3.28)
+project(rsu_sample NONE)
 
-#define these for qspi image generation
-include(${CMAKE_CURRENT_SOURCE_DIR}/../common/download_dep.cmake)
-set(PFG_PATH "${CMAKE_SOURCE_DIR}/initial_image.pfg" CACHE STRING "PFG path" FORCE)
+set(RSU_TYPE "rsu_sdcard" CACHE STRING "RSU sample type: rsu_ddr | rsu_qspi | rsu_sdcard")
+set_property(CACHE RSU_TYPE PROPERTY STRINGS rsu_ddr rsu_qspi rsu_sdcard)
 
-include(FetchContent)
+set(_valid_rsu_types rsu_ddr rsu_qspi rsu_sdcard)
+if(NOT RSU_TYPE IN_LIST _valid_rsu_types)
+    message(FATAL_ERROR "RSU_TYPE must be one of: ${_valid_rsu_types}. Got: '${RSU_TYPE}'")
+endif()
 
-set(FREERTOS_FATFS y)
-set(FREERTOS_USB y)
-set(FREERTOS_TCPIP n)
-set(FREERTOS_LIBRSU y)
-set(FREERTOS_LIBFCS n)
+# -DPFG_QSPI=<path> overrides the RSU initial image PFG used by the child cmake.
+# The child's default is its own initial_image.pfg; pass this to override it.
+if(DEFINED PFG_QSPI AND NOT PFG_QSPI STREQUAL "")
+    set(PFG_PATH "${PFG_QSPI}" CACHE STRING "RSU initial image PFG path" FORCE)
+endif()
 
-FetchContent_Declare(
-    freertos
-    SOURCE_DIR ${CMAKE_SOURCE_DIR}/../../
-)
-
-# Get the freertos repo
-FetchContent_MakeAvailable(freertos)
-FetchContent_GetProperties(freertos)
-
-# project
-project(rsu_sample C CXX ASM)
-
-set(LINKER_SCRIPT "${freertos_SOURCE_DIR}/lscript.ld")
-include(${freertos_SOURCE_DIR}/tools/target_socfpga.cmake)
-
-# target
-add_executable(${PROJECT_NAME}.elf)
-
-#Add image generation
-generate_bin_file(${PROJECT_NAME}.elf)
-add_sd_image(${PROJECT_NAME}.elf)
-add_qspi_image(${PROJECT_NAME}.elf)
-
-
-# link to the baremetal library
-target_link_libraries(${PROJECT_NAME}.elf
-    PRIVATE freertos_socfpga
-)
-
-file(GLOB SAMPLE_SRCS "${CMAKE_CURRENT_SOURCE_DIR}/*.c")
-
-# sources
-target_sources(${PROJECT_NAME}.elf
-    PRIVATE main.c ${SAMPLE_SRCS}
-)
-
-# specify linker script
-target_link_options(${PROJECT_NAME}.elf PRIVATE
-    -T${LINKER_SCRIPT}
-)
-
-add_custom_command(
-    TARGET qspi-image
-    POST_BUILD
-    COMMAND ${QUARTUS_PFG_EXECUTABLE} -c ${CMAKE_BINARY_DIR}/${SOCFPGA_SOF_FILE} app2.rpd -o hps_path=./bl2.hex -o mode=ASX4 -o bitswap=ON
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/qspi_atf_binaries
-    COMMENT "Generating app2.rpd for QSPI image"
-    BYPRODUCTS ${CMAKE_BINARY_DIR}/qspi_atf_binaries/app2.rpd
-    DEPENDS
-        get_sof_file
-        atf-bl2-bl31-qspi
-        ${QUARTUS_PFG_EXECUTABLE}
-    )
+add_subdirectory(${RSU_TYPE})

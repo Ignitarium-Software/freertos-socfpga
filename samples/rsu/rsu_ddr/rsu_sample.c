@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -8,7 +8,7 @@
 
 #include <stdint.h>
 #include "osal_log.h"
-
+#include "socfpga_mmc.h"
 #include <libRSU.h>
 #include <libRSU_OSAL.h>
 
@@ -20,31 +20,31 @@
  *
  * @details
  * @section rsu_description Description
- * This is a simple program to demonstrate the use of librsu library. The sample application erases slot 1 and programs an application image from the SD card to that slot,
- * verifies it, and loads it. The sample also performs a ROS (Remote OS update) operation on the corresponding SSBL slot (i.e., it erases, programs, and verifies the SSBL slot
- * corresponding to slot 1, which is slot 3 for the pfg file that the sample uses). The user can refer to the <a href="https://altera-fpga.github.io/rel-24.3/
+ * This is a simple program to demonstrate the use of librsu library with images embedded directly
+ * into the executable and loaded from DDR. The application image ('app2.rpd') and the SSBL image
+ * ('fip2.bin') are converted to linkable object files at build time using 'objcopy' and placed in
+ * the 'obj/' directory ('app_image_rpd.o' and 'ssbl_image_bin.o'). At runtime the images are
+ * already resident in DDR memory via linker-generated symbols and are programmed directly into the
+ * target QSPI slots using librsu — no SD card or file system access is required.
+ * The sample erases slot @c RSU_SLOT, programs the application image from DDR, verifies it, then
+ * performs a ROS (Remote OS Update) by erasing slot @c ROS_SLOT and programming the SSBL (fip)
+ * image in raw mode. Finally it requests the updated slot to be loaded on the next warm reboot.
+ * The user can refer to the <a href="https://altera-fpga.github.io/rel-24.3/
  * embedded-designs/agilex-5/e-series/premium/rsu/ug-rsu-agx5e-soc/#creating-the-initial-flash-image">Creating the Flash Image</a> to understand more about
  * creating the initial image needed for RSU (Remote System Update) and ROS (Remote OS update) in Linux-based systems. The pfg in the link, however,
  * requires some changes to be used for FreeRTOS. The bitstream's 'hps_path' should be updated with the path to 'bl2.hex' instead of 'u-boot-spl-dtb.hex'.
  * The user can also add additional slots to accommodate fip (SSBL) binaries or additional images (for reference, refer to the pfg in the rsu samples folder).
- * For the steps to create the application image, the user can refer to the link <a href="https://altera-fpga.github.io/rel-24.3/embedded-designs/agilex-5/
- * e-series/premium/rsu/ug-rsu-agx5e-soc/#creating-the-application-image">Creating the Application Image</a>. To create an application image that
- * supports FreeRTOS, the user must replace the argument 'hps_path' with the path to 'bl2.hex' instead of the path 'u-boot-spl-dtb.hex'. When the user creates
- * the QSPI image, the creation of the application image is automatically taken care of. The user can copy 'app2.rpd' from the samples/build/build/qspi-atf-binaries/
- * folder to the SD card. For ROS update, the user can copy a valid 'fip.bin' (with the same ATF version) to the SD card. For this sample, it is assumed that a
- * valid fip binary named 'fip2.bin' is used. Both the fip binary and application image must be present in the FAT partition of the SD card.
  *
  * @section rsu_prerequisites Prerequisites
- * - Make sure to use a RSU supported image having  at least 2 slots with ATF version 2.12.0 or later
- * - Ensure that a rpd file is stored on the SD card, and its name matches the variable(file name shall be 8 characters or below) 'rsu_file_name' <br>
- * - Ensure that a fip.bin file is stored on the SD card, and its name matches the variable(file name shall be 8 characters or below) 'ros_file_name' <br>
- * - The sample pfg file used to create the initial RSU jic image is available at @c drivers/samples/rsu/initial_image.pfg which creates 6 slots(0 to 5).
+ * - Make sure to use a RSU supported image having at least 2 slots with ATF version 2.12.0 or later.
+ * - The pre-built object files 'app_image_rpd.o' and 'ssbl_image_bin.o' must be present in the
+ *   'samples/rsu/rsu_ddr/obj/' directory before building. These are generated from 'app2.rpd' and
+ *   'fip2.bin' respectively using 'objcopy'. If either file is missing the build will fail.
+ * - The sample pfg file used to create the initial RSU jic image is available at @c samples/rsu/rsu_ddr/initial_image.pfg.
  *
  * @section rsu_param Configurable Parameters
  * - The application image slot to be updated is defined with @c RSU_SLOT macro.
- * - The fip binary (SSBL) slot to be updated is defined with @c ROS_SLOT macro(if P1 slot is updated update SSBL.P1).
- * - The name of the application image is stored in the variable @c rsu_file_name.
- * - The name of the fip binary(SSBL) is stored in the variable @c ros_file_name.
+ * - The SSBL (fip) slot to be updated is defined with @c ROS_SLOT macro.
  *
  * @section rsu_how_to_run How to Run
  * 1. Follow the common README for build and flashing instructions.
@@ -64,12 +64,11 @@
 /* SSBL/fip bianry slot to be updated */
 #define ROS_SLOT    3
 
-/* Application image used by RSU sample. */
-char *rsu_file_name = "/app2.rpd";
-
-/* Raw binary used by ROS sample. */
-char *ros_file_name = "/fip2.bin";
-
+/* Symbols from objcopy-embedded .rpd files */
+extern char app_image_start[];
+extern char app_image_end[];
+extern char ssbl_image_start[];
+extern char ssbl_image_end[];
 /*
  *  @brief Get slot count
  *
@@ -102,41 +101,42 @@ static int rsu_client_erase_image(int slot_num)
 static int rsu_client_copy_status_log(void)
 {
     struct rsu_status_info info;
-    int rtn = -1;
+    int ret = -1;
 
     if (!rsu_status_log(&info))
     {
-        rtn = 0;
+        ret = 0;
         PRINT("      VERSION: 0x%08X", (int)info.version);
         PRINT("        STATE: 0x%08X", (int)info.state);
         PRINT("CURRENT IMAGE: 0x%016lX", info.current_image);
         PRINT("   FAIL IMAGE: 0x%016lX", info.fail_image);
         PRINT("    ERROR LOC: 0x%08X", (int)info.error_location);
         PRINT("ERROR DETAILS: 0x%08X", (int)info.error_details);
-        if (RSU_VERSION_DCMF_VERSION(info.version) && RSU_VERSION_ACMF_VERSION(
-                info.version))
+        if (RSU_VERSION_DCMF_VERSION(info.version) &&
+                RSU_VERSION_ACMF_VERSION(info.version))
         {
             PRINT("RETRY COUNTER: 0x%08X", (int)info.retry_counter);
         }
     }
-    return rtn;
+    return ret;
 }
 
 /*
  * @brief Print slot attributes
  *
- *    Function to get slot info. Gets the details like partition name,
+ *    Function to get individual slot info. Gets the details like partition name,
  *    partition offset, partition size and priority.
  */
 static int rsu_client_list_slot_attribute(int slot_num)
 {
     struct rsu_slot_info info;
-    int rtn = -1;
+    int ret = -1;
 
     if (!rsu_slot_get_info(slot_num, &info))
     {
-        rtn = 0;
+        ret = 0;
         PRINT("      NAME: %s", info.name);
+        PRINT("      SLOT: %d", slot_num);
         PRINT("    OFFSET: 0x%016lX", info.offset);
         PRINT("      SIZE: 0x%08X", info.size);
 
@@ -149,46 +149,50 @@ static int rsu_client_list_slot_attribute(int slot_num)
             PRINT("  PRIORITY: [disabled]");
         }
     }
-    return rtn;
+    return ret;
 }
 
 /*
  * @brief Add app image or raw binary
  *
- *    Function to flash an application image or raw binary to a slot. The application image
- *    and fip binary to be flashed should be present in the sd card. For RSU operation file is
- *    not in raw format and for ROS it is in raw format.
+ *    Function to flash an application image or raw binary from DDR to a slot.
+ *    The application image and fip binary to be flashed should be present in
+ *    the sd card. For RSU operation file is not in raw format and for ROS it
+ *    is in raw format.
  */
-static int rsu_client_add_app_image(char *image_name, int slot_num, int raw)
+static int rsu_client_add_app_image_from_ddr(void *image_buf, int slot_num,
+        int size, int raw)
 {
     if (raw)
     {
-        return rsu_slot_program_file_raw(slot_num, image_name);
+        return rsu_slot_program_buf_raw(slot_num, image_buf, size);
     }
 
-    return rsu_slot_program_file(slot_num, image_name);
+    return rsu_slot_program_buf(slot_num, image_buf, size);
 }
 
 /*
  * @brief Verify flashed image or raw binary
  *
- *    Function to compare flashed image or raw binary with actual file. The image and
- *    the binary to be verified shall be present in the sd card.
+ *    Function to compare flashed image or raw binary with actual file.
+ *    The image and the binary to be verified shall be present in the RAM.
  */
-static int rsu_client_verify_data(char *file_name, int slot_num, int raw)
+static int rsu_client_verify_data_from_ddr(void *image_buf, int slot_num,
+        int size, int raw)
 {
     if (raw)
     {
-        return rsu_slot_verify_file_raw(slot_num, file_name);
+        return rsu_slot_verify_buf_raw(slot_num, image_buf, size);
     }
 
-    return rsu_slot_verify_file(slot_num, file_name);
+    return rsu_slot_verify_buf(slot_num, image_buf, size);
 }
 
 /*
  * @brief Load a slot
  *    Function to load the requested slot. Once the slot is requested the
- *    board goes for a warm reboot. Power cycle the board to boot in the requested slot.
+ *    board goes for a warm reboot. Power cycle the board to boot in the
+ *    requested slot.
  */
 static int rsu_client_request_slot_be_loaded(int slot_num)
 {
@@ -198,14 +202,21 @@ static int rsu_client_request_slot_be_loaded(int slot_num)
 void rsu_task(void)
 {
     int ret, slot_count;
-    PRINT("Starting  RSU-ROS sample application");
+    int idx = 0;
+    void *app_buf = (void *)app_image_start;
+    int app_size = (int)(app_image_end - app_image_start);
+    void *ssbl_buf = (void *)ssbl_image_start;
+    int ssbl_size = (int)(ssbl_image_end - ssbl_image_start);
+
+    PRINT("Starting RSU-ROS sample application");
 
     ret = librsu_init("");
-    if (ret != 0)
+    if (ret)
     {
-        ERROR("RSU initialization failed!!");
+        fprintf(stderr, "librsu_init failed: %d\n", ret);
         return;
     }
+
     PRINT("Getting the number of slots in the image ...");
     slot_count = rsu_client_get_slot_count();
     if (slot_count < 0)
@@ -213,10 +224,10 @@ void rsu_task(void)
         ERROR("No available slots");
         return;
     }
-    PRINT("The number of slots avilable is :%d", slot_count);
+    PRINT("The number of slots available is :%d", slot_count);
 
     PRINT("Getting slot information ...");
-    for (int idx = 0; idx < slot_count; idx++)
+    for (idx = 0; idx < slot_count; idx++)
     {
         ret = rsu_client_list_slot_attribute(idx);
         if (ret != 0)
@@ -225,6 +236,7 @@ void rsu_task(void)
             return;
         }
     }
+
     PRINT("Getting current slot status ...");
     ret = rsu_client_copy_status_log();
     if (ret != 0)
@@ -243,25 +255,25 @@ void rsu_task(void)
     PRINT("Done.");
 
     PRINT("Programming image to slot %d ...", RSU_SLOT);
-    ret = rsu_client_add_app_image(rsu_file_name, RSU_SLOT, 0);
+    ret = rsu_client_add_app_image_from_ddr(app_buf, RSU_SLOT, app_size, 0);
     if (ret != 0)
     {
         ERROR("Failed to program the image");
         return;
     }
-
     PRINT("Done.");
 
     PRINT("Verifying the image in slot %d...", RSU_SLOT);
-    ret = rsu_client_verify_data(rsu_file_name, RSU_SLOT, 0);
+    ret = rsu_client_verify_data_from_ddr(app_buf, RSU_SLOT, app_size, 0);
     if (ret != 0)
     {
-        ERROR("Slot verifiation failed");
+        ERROR("Slot verification failed");
         return;
     }
     PRINT("Done.");
 
-    PRINT("Erasing the slot %d ...", ROS_SLOT);
+    /* Program fip2.bin */
+    PRINT("Erasing the slot %d ....", ROS_SLOT);
     ret = rsu_client_erase_image(ROS_SLOT);
     if (ret != 0)
     {
@@ -270,21 +282,20 @@ void rsu_task(void)
     }
     PRINT("Done.");
 
-    PRINT("Programming binary to slot %d ...", ROS_SLOT);
-    ret = rsu_client_add_app_image(ros_file_name, ROS_SLOT, 1);
+    PRINT("Programming image to slot %d ...", ROS_SLOT);
+    ret = rsu_client_add_app_image_from_ddr(ssbl_buf, ROS_SLOT, ssbl_size, 1);
     if (ret != 0)
     {
         ERROR("Failed to program the image");
         return;
     }
-
     PRINT("Done.");
 
-    PRINT("Verifying the binary in slot %d...", ROS_SLOT);
-    ret = rsu_client_verify_data(ros_file_name, ROS_SLOT, 1);
+    PRINT("Verifying the image in slot %d...", ROS_SLOT);
+    ret = rsu_client_verify_data_from_ddr(ssbl_buf, ROS_SLOT, ssbl_size, 1);
     if (ret != 0)
     {
-        ERROR("Slot verifiation failed");
+        ERROR("Slot verification failed");
         return;
     }
     PRINT("Done.");
