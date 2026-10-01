@@ -17,7 +17,6 @@
 #define TIMER_DISABLE    0x0U
 #define TIMER_ENABLE     0x1U
 
-/*Macro to convert ticks to miro second*/
 #define TIMER_TICKS_TO_US(clk_hz, ticks) \
     ((uint32_t)((((uint64_t)(ticks)) * ((uint64_t)(1000U * 1000U))) / \
     (clk_hz)))
@@ -33,7 +32,7 @@ struct timer_context
     socfpga_hpu_interrupt_t interrupt_id;
     uint32_t clk_hz;
     timer_callback_t callback_func;
-    void *param;
+    void *usr_cntxt;
 
 };
 
@@ -85,7 +84,7 @@ timer_handle_t timer_open(timer_instance_t instance)
     uint8_t res;
     int32_t status;
     clock_block_t clock_block_id = CLOCK_INVALID;
-    socfpga_interrupt_err_t int_ret;
+    int err;
     reset_periphrl_t rst_instance;
     int32_t ret = 0;
 
@@ -98,7 +97,7 @@ timer_handle_t timer_open(timer_instance_t instance)
     timer_handle_t handle = &timer_descriptor[instance];
     if (handle->is_open == 1)
     {
-        ERROR("Timer instance is already running");
+        ERROR("Timer instance is already open");
         return NULL;
     }
     /* Update Timer base address to the context variable */
@@ -108,22 +107,22 @@ timer_handle_t timer_open(timer_instance_t instance)
         case TIMER_SYS0:
             handle->base_address = OSC1_TIMER0_BASE_ADDR;
             handle->interrupt_id = TIMER_OSC10IRQ;
-            clock_block_id = CLOCK_SP_TIMER;
+            clock_block_id = CLOCK_OSC1TIMER;
             break;
         case TIMER_SYS1:
             handle->base_address = OSC1_TIMER1_BASE_ADDR;
             handle->interrupt_id = TIMER_OSC11IRQ;
-            clock_block_id = CLOCK_SP_TIMER;
+            clock_block_id = CLOCK_OSC1TIMER;
             break;
         case TIMER_SP0:
             handle->base_address = SPTIMER0_BASE_ADDR;
             handle->interrupt_id = TIMER_L4SP0IRQ;
-            clock_block_id = CLOCK_OSC1TIMER;
+            clock_block_id = CLOCK_SP_TIMER;
             break;
         case TIMER_SP1:
-            handle->base_address = SPTIMER0_BASE_ADDR;
+            handle->base_address = SPTIMER1_BASE_ADDR;
             handle->interrupt_id = TIMER_L4SP1IRQ;
-            clock_block_id = CLOCK_OSC1TIMER;
+            clock_block_id = CLOCK_SP_TIMER;
             break;
         default:
             ERROR("Invalid Timer instance");
@@ -159,7 +158,7 @@ timer_handle_t timer_open(timer_instance_t instance)
         }
     }
     /* Get the source clock value in Hz */
-    if (clk_mngr_get_clk(clock_block_id, &clk_hz) == 1U)
+    if (clk_mngr_get_clk(clock_block_id, &clk_hz) != 0U)
     {
         ERROR("error while getting clock");
         return NULL;
@@ -167,16 +166,16 @@ timer_handle_t timer_open(timer_instance_t instance)
     handle->clk_hz = clk_hz;
 
     /* Setup and enable interrupts in GIC */
-    int_ret = interrupt_register_isr(handle->interrupt_id, timer_irq_handler,
+    err = interrupt_register_isr(handle->interrupt_id, timer_irq_handler,
             handle);
-    if (int_ret != ERR_OK)
+    if (err != 0)
     {
         ERROR("error while registering ISR");
         return NULL;
     }
-    int_ret = interrupt_enable(handle->interrupt_id,
+    err = interrupt_enable(handle->interrupt_id,
             GIC_INTERRUPT_PRIORITY_TIMER);
-    if (int_ret != ERR_OK)
+    if (err != 0)
     {
         ERROR("error while enabling ISR");
         return NULL;
@@ -195,7 +194,7 @@ timer_handle_t timer_open(timer_instance_t instance)
 
 int32_t timer_set_period_us(timer_handle_t const htimer, uint32_t period)
 {
-    uint32_t volatile val, count_val;
+    uint32_t val, count_val;
     if (htimer == NULL)
     {
         ERROR("Timer handle cannot be NULL");
@@ -207,14 +206,22 @@ int32_t timer_set_period_us(timer_handle_t const htimer, uint32_t period)
         return -EBUSY;
     }
     /* Timer needs to be disabled to configure */
-    WR_REG32(htimer->base_address + TIMER_TIMER1CONTROLREG, TIMER_DISABLE);
     val = RD_REG32(htimer->base_address + TIMER_TIMER1CONTROLREG);
-    val |= TIMER_TIMER1CONTROLREG_TIMER_MODE_MASK;
+    val &= ~(TIMER_TIMER1CONTROLREG_TIMER_ENABLE_MASK |
+            TIMER_TIMER1CONTROLREG_TIMER_MODE_MASK |
+            TIMER_TIMER1CONTROLREG_TIMER_INTERRUPT_MASK_MASK);
     WR_REG32(htimer->base_address + TIMER_TIMER1CONTROLREG, val);
+
     count_val = timer_us_to_ticks(htimer->clk_hz, period);
+
+    if (count_val != TIMER_FREE_RUNNING_PERIOD)
+    {
+        val |= TIMER_TIMER1CONTROLREG_TIMER_MODE_MASK;
+        WR_REG32(htimer->base_address + TIMER_TIMER1CONTROLREG, val);
+    }
+
     WR_REG32(htimer->base_address + TIMER_TIMER1LOADCOUNT, count_val);
     htimer->is_configured = 1;
-
     return 0;
 }
 
@@ -278,7 +285,7 @@ int32_t timer_stop(timer_handle_t const htimer)
 
 int32_t timer_close(timer_handle_t const htimer)
 {
-    socfpga_interrupt_err_t int_ret;
+    int err;
 
     if ((htimer == NULL))
     {
@@ -298,8 +305,8 @@ int32_t timer_close(timer_handle_t const htimer)
      */
     WR_REG32(htimer->base_address + TIMER_TIMER1CONTROLREG, TIMER_DISABLE);
     /* Disable timer interrupt at GIC level */
-    int_ret = interrupt_spi_disable(htimer->interrupt_id);
-    if (int_ret != ERR_OK)
+    err = interrupt_disable(htimer->interrupt_id);
+    if (err != 0)
     {
         ERROR("error while disabling ISR");
         return -EFAULT;
@@ -313,6 +320,7 @@ int32_t timer_close(timer_handle_t const htimer)
     htimer->interrupt_id = MAX_HPU_SPI_INTERRUPT;
     htimer->clk_hz = 0;
     htimer->callback_func = NULL;
+    htimer->usr_cntxt = NULL;
 
     return 0;
 }
@@ -370,7 +378,7 @@ int32_t timer_set_callback(timer_handle_t const htimer,
     }
     /* Assign user callback to context variable */
     htimer->callback_func = callback;
-    htimer->param = param;
+    htimer->usr_cntxt = param;
     return 0;
 }
 
@@ -383,6 +391,6 @@ void timer_irq_handler(void *data)
     (void)val;
     if (handle->callback_func != NULL)
     {
-        handle->callback_func(data);
+        handle->callback_func(handle->usr_cntxt);
     }
 }

@@ -14,10 +14,7 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
-
+#include "socfpga_xgmac.h"
 #include "socfpga_xgmac_ll.h"
 
 /**
@@ -43,7 +40,7 @@ static const xgmacdma_config_t dma_config = {
  * @brief  Configuration parameters for XGMAC DMA channel Parameters
  */
 
-static const xgmacdma_chanl_config_t dma_chnl_config = {
+static const xgmacdma_ch_config_t dma_ch_config = {
     /* DMA channel Control register */
     .pblx8 = 1,
     .sph = 0,
@@ -158,9 +155,9 @@ static const xgmacmac_pkt_filter_config_t mac_pkt_filter_config = {
  */
 static const xgmac_dev_config_t mac_dev_config = {
 
-    .nofdmachannels = 1,
-    .noftxqueues = 1,
-    .nofrxqueues = 1,
+    .dma_ch_num = 1,
+    .tx_queue_num = 1,
+    .rx_queue_num = 1,
 };
 
 /* Main XGMAC Configuration instance */
@@ -168,7 +165,7 @@ static const xgmac_dev_config_str_t xgmac_dev_config_str =
 {
     .mac_dev_config = &mac_dev_config,
     .dma_config = &dma_config,
-    .dma_channel_config = &dma_chnl_config,
+    .dma_ch_config = &dma_ch_config,
     .mtl_tx_q_config = &mtl_txq_config,
     .mtl_rx_q_config = &mtl_rxq_config,
     .mac_rx_q_ctrl_config = &mac_rxq_ctrl_config,

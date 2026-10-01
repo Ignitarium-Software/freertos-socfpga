@@ -1,13 +1,25 @@
 /*
-* SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
-*
-* SPDX-License-Identifier: MIT-0
-*
-* GIC v3 register definitions
-*/
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
+ *
+ * SPDX-License-Identifier: MIT-0
+ *
+ * GIC v3 register definitions
+ */
 
 #ifndef __ARM_GIC_REGISTERS_H__
 #define __ARM_GIC_REGISTERS_H__
+
+/**
+ * @file arm_gic_registers.h
+ * @brief GIC v3 register layout definitions.
+ */
+
+/**
+ * @defgroup gic_regs GIC Register Layouts
+ * @ingroup drivers
+ * @brief GIC v3 register structures.
+ * @{
+ */
 
 #include <stdint.h>
 
@@ -137,5 +149,7 @@ struct gic_v3_rdist_if
     struct gic_v3_rdist_res_if res   __attribute__((aligned (0x10000)));
   #endif
 };
+
+/** @} */
 
 #endif /* __ARM_GIC_REGISTERS_H__ */

@@ -273,7 +273,7 @@ void mbox_poll_resp_task(void *param)
             }
         }
         mbox_descriptor->task_state = MBOX_TASK_OPEN;
-        if (interrupt_enable(SDM_APS_MAILBOX_INTR, 14) != ERR_OK)
+        if (interrupt_enable(SDM_APS_MAILBOX_INTR, 14) != 0)
         {
             ERROR("Failed to enable interrupt");
             return;
@@ -459,7 +459,7 @@ int32_t sip_svc_send(sdm_client_handle_t mbox_handle, uint64_t smc_func_id,
             {
                 (void)memcpy(&smc_values[1], mbox_args, arg_len);
             }
-            if (interrupt_enable( SDM_APS_MAILBOX_INTR, 14) != ERR_OK)
+            if (interrupt_enable(SDM_APS_MAILBOX_INTR, 14) != 0)
             {
                 ERROR("Failed to enable interrupt");
                 return -EIO;
@@ -536,7 +536,7 @@ int mbox_init(void)
             return -EIO;
         }
         if (interrupt_register_isr(SDM_APS_MAILBOX_INTR, mbox_irq_handler,
-                NULL ) != ERR_OK)
+                NULL ) != 0)
         {
             ERROR("Failed to register interrupt");
             return -EIO;
@@ -576,7 +576,7 @@ int mbox_deinit(void)
             return -EIO;
         }
     }
-    if (interrupt_spi_disable(SDM_APS_MAILBOX_INTR) != ERR_OK)
+    if (interrupt_disable(SDM_APS_MAILBOX_INTR) != 0)
     {
         ERROR("Failed to disable interrupt");
         return -EIO;
@@ -614,7 +614,7 @@ void mbox_irq_handler(void *param)
      * Disable the interrupt as the interrupt keeps getting triggered
      * while a response is available
      */
-    if (interrupt_spi_disable(SDM_APS_MAILBOX_INTR) != ERR_OK)
+    if (interrupt_disable(SDM_APS_MAILBOX_INTR) != 0)
     {
         ERROR("Failed to disable interrupt");
         return;

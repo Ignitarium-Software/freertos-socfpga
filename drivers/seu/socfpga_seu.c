@@ -100,7 +100,7 @@ void seu_set_call_back(seu_call_back_t call_back)
 int32_t seu_init(void)
 {
     int32_t ret;
-    socfpga_interrupt_err_t int_ret;
+    int err;
 
     ret = mbox_init();
     if (ret != 0)
@@ -123,9 +123,9 @@ int32_t seu_init(void)
         return -EIO;
     }
 
-    int_ret = interrupt_register_isr(SDM_HPS_SPARE_INTR0, seu_irq_handler,
+    err = interrupt_register_isr(SDM_HPS_SPARE_INTR0, seu_irq_handler,
             NULL);
-    if (int_ret != ERR_OK)
+    if (err != 0)
     {
         return -EIO;
     }
@@ -167,8 +167,7 @@ int32_t seu_insert_safe_err(seu_err_params_t err_params)
     }
 
     /* Prepare parameter set for error injection */
-    if (interrupt_enable(SDM_HPS_SPARE_INTR0, GIC_INTERRUPT_PRIORITY_SEU) !=
-            ERR_OK)
+    if (interrupt_enable(SDM_HPS_SPARE_INTR0, GIC_INTERRUPT_PRIORITY_SEU) != 0)
     {
         ERROR("SEU interrupt enable failed");
         return -EIO;
@@ -411,7 +410,7 @@ void seu_irq_handler(void *param)
         seu_descriptor.seu_call_back();
     }
 
-    (void)interrupt_spi_disable(SDM_HPS_SPARE_INTR0);
+    (void)interrupt_disable(SDM_HPS_SPARE_INTR0);
 }
 
 void seu_mailbox_complete(uint64_t *resp_data)

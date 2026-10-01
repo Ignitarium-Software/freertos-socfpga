@@ -15,6 +15,7 @@
 /* Names of mount points */
 static const char *sdmmc_mount = "/sd/";
 static const char *usb_mount = "/usb/";
+static const char fdt_name[] = "N/A";
 
 FF_Disk_t *xDiskObj = NULL;
 uint8_t ucMountStatus = UNMOUNTED;
@@ -148,5 +149,10 @@ uint32_t fat_read( const char *file, void *buffer )
     }
     fat_unmount();
     return (uint32_t) BytesRead;
+}
+
+const FCS_OSAL_CHAR *fcs_fdt_get_name(FCS_OSAL_CHAR *fit, FCS_OSAL_INT noffset, FCS_OSAL_INT *len)
+{
+	return fdt_name;
 }
 

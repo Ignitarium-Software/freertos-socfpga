@@ -168,7 +168,6 @@ int32_t timer_start(timer_handle_t const htimer);
  * - 0:       on success
  * - -EINVAL: if timer handle is NULL
  * - -EPERM:  if timer is not running
- * - -EFAULT: if failed to disable interrupt
  */
 int32_t timer_stop(timer_handle_t const htimer);
 

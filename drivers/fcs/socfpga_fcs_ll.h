@@ -103,7 +103,7 @@
 #define FCS_SET_CRYPT_MODE(crypt_mode)       ((crypt_mode & 0x1U) << 8U)
 #define FCS_SET_TAG_LEN(crypto_param)        ((crypto_param & 0xFFU) << 16U)
 #define FCS_SET_DIGEST_SIZE(crypto_param)    ((crypto_param & 0xFFU) << 4U)
-#define FCS_SMMU_GET_ADDR(addr)              ((uint64_t)(uintptr_t)(addr - 0x80000000U))
+#define FCS_SMMU_GET_ADDR(addr)              ((uint64_t)(uintptr_t)addr - 0x80000000U)
 
 #define GET_QSPI_CHIP_SEL(chip_sel)    ((chip_sel >> 28UL) & 0xFUL)
 #define GET_QSPI_MODE(chip_sel)        ((chip_sel >> 27UL) & 0x1U)

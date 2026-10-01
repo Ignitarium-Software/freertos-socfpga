@@ -7,7 +7,6 @@ else()
     target_compile_options(freertos_kernel_port PRIVATE ${DEFAULT_C_FLAGS_RELEASE})
 endif()
 
-add_dependencies(freertos_kernel_port apply_smp_patch)
 target_sources(freertos_kernel_port
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/portmacro.h

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -14,22 +14,22 @@
     : "r" (val))
 
 
-void gic_reg_enable_group0_interrupts(void)
+void gic_enable_group0_interrupts(void)
 {
     GIC_REG_WRITE(ICC_IGRPEN0_EL1, (uint64_t)1);
 }
 
-void gic_reg_enable_group1_interrupts(void)
+void gic_enable_group1_interrupts(void)
 {
     GIC_REG_WRITE(ICC_IGRPEN1_EL1, (uint64_t)1);
 }
 
-void gic_reg_set_priority_mask(uint32_t interrupt_id)
+void gic_set_priority_mask(uint32_t mask)
 {
-    GIC_REG_WRITE(ICC_PMR_EL1, (uint64_t)interrupt_id);
+    GIC_REG_WRITE(ICC_PMR_EL1, (uint64_t)mask);
 }
 
-uint64_t gic_reg_get_cpu_affinity(void)
+uint64_t gic_get_cpu_affinity(void)
 {
     uint64_t affinity = 0U;
     __asm__ volatile (

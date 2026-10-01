@@ -30,7 +30,7 @@ iossm_context_t *iossm_open(uint32_t instance)
 {
     iossm_response_data_t resp_data;
     iossm_type_t iossm_desc;
-    socfpga_interrupt_err_t int_ret;
+    int err;
     iossm_context_t *iossm_handle;
 
 
@@ -50,14 +50,14 @@ iossm_context_t *iossm_open(uint32_t instance)
     iossm_handle->iossm_base_addr = IOSSM0_BASE_ADDR + (instance *
             IOSSM_INSTANCE_OFFSET);
     iossm_handle->iossm_instance_is_open = true;
-    int_ret = interrupt_register_isr(IO96B0_DBE_IRQ, iossm_irq_handler, iossm_handle);
-    if (int_ret != ERR_OK)
+    err = interrupt_register_isr(IO96B0_DBE_IRQ, iossm_irq_handler, iossm_handle);
+    if (err != 0)
     {
         return NULL;
     }
-    int_ret = interrupt_spi_enable(IO96B0_DBE_IRQ, SPI_INTERRUPT_TYPE_EDGE,
+    err = interrupt_spi_enable(IO96B0_DBE_IRQ, SPI_INTERRUPT_TYPE_EDGE,
             SPI_INTERRUPT_MODE_TARGET, GIC_INTERRUPT_PRIORITY_IOSSM);
-    if (int_ret != ERR_OK)
+    if (err != 0)
     {
         return NULL;
     }

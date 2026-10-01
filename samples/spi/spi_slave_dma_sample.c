@@ -27,8 +27,6 @@
 
 #include "socfpga_spi.h"
 #include "socfpga_timer.h"
-#include "socfpga_mmc.h"
-#include "socfpga_fpga_manager.h"
 #include "socfpga_cache.h"
 
 #include "osal.h"
@@ -134,8 +132,6 @@
 #define SPI_SLAVE_DMA_SAMPLE_NUM_XFERS 6U
 #endif
 
-#define RBF_FILENAME            "/core.rbf"
-
 /*
  * DMA channel allocation.
  * Master uses CH1 (TX) and CH2 (RX); slave uses CH3 (TX) and CH4 (RX).
@@ -237,31 +233,6 @@ static uint32_t timer_elapsed_us(uint32_t start_rem_us, uint32_t end_rem_us,
         return start_rem_us - end_rem_us;
     }
     return start_rem_us + (wrap_us - end_rem_us);
-}
-
-static void load_bitstream(void)
-{
-    uint32_t file_size;
-    uint8_t *rbf_ptr;
-
-    PRINT("Reading bitstream from SD card");
-    rbf_ptr = mmc_read_file(SOURCE_SDMMC, RBF_FILENAME, &file_size);
-    if (rbf_ptr == NULL)
-    {
-        ERROR("Unable to read bitstream");
-        return;
-    }
-
-    PRINT("Configuring FPGA");
-    if (load_fpga_bitstream(rbf_ptr, file_size) != 0)
-    {
-        ERROR("Failed to load bitstream");
-        vPortFree(rbf_ptr);
-        return;
-    }
-
-    vPortFree(rbf_ptr);
-    PRINT("Bitstream loaded successfully");
 }
 
 static void spi_done_callback(spi_xfer_status_t status, void *pparam)
@@ -744,8 +715,6 @@ void spi_slave_dma_task(void)
         ERROR("Failed to create semaphores");
         goto cleanup;
     }
-
-    load_bitstream();
 
     PRINT("SPI slave DMA loopback sample (SPIM1 <-> SPIS0, DMA-enabled)");
     PRINT("Transfers: %u, Bytes: %u (%u x %u-byte segments)",

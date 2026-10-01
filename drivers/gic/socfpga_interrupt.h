@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -15,6 +15,7 @@
  * @brief File for the HAL APIs of Interrupt controller.
  */
 
+#include <errno.h>
 #include <stdint.h>
 #include "socfpga_interrupt_priority.h"
 
@@ -356,18 +357,10 @@ typedef enum {
 } socfpga_hpu_spi_interrupt_mode_t;
 
 /**
- * @brief Interrupt error codes
+ * @brief Interrupt API return values.
  * @ingroup intr_enums
+ * @details Functions return 0 on success or a negative errno on failure.
  */
-typedef enum {
-    ERR_OK = 0, /*!< No error */
-    ERR_SPI_ID, /*!< Invalid SPI ID */
-    ERR_SPI_TYPE, /*!< Invalid SPI type */
-    ERR_SPI_MODE, /*!< Invalid SPI mode */
-    ERR_SPI_TARGET, /*!< Invalid SPI target */
-    ERR_INTERRUPT_CALLBACK, /*!< Invalid callback */
-    ERR_PPI_ID /*!< Invalid PPI ID */
-} socfpga_interrupt_err_t;
 
 /**
  * @addtogroup intr_fns
@@ -379,7 +372,7 @@ typedef enum {
 void interrupt_init_gic(void);
 
 /**
- * @brief Initializes the GIC redistributor of the core
+ * @brief Initializes the GIC redistributor of the core.
  */
 void interrupt_enable_core_redis(void);
 
@@ -398,22 +391,26 @@ void gic_default_interrupt_handler(void *data);
  * @param[in] interrupt_mode Mode of interrupt.
  * @param[in] priority Priority of the interrupt.
  * @return
- * - ERR_OK on success
- * - ERR_SPI_ID if the interrupt ID is invalid
+ * - 0 on success
+ * - -ERANGE if the interrupt ID is invalid
+ * - -EINVAL if the parameters are invalid
+ * - -ENODEV if the GIC base pointers are not available
  */
-socfpga_interrupt_err_t interrupt_spi_enable(socfpga_hpu_interrupt_t id,
+int interrupt_spi_enable(socfpga_hpu_interrupt_t id,
         socfpga_hpu_interrupt_type_t interrupt_type,
         socfpga_hpu_spi_interrupt_mode_t interrupt_mode, uint8_t priority);
 
 /**
- * @brief Disable shared peripheral interrupt.
+ * @brief Disable interrupt.
  *
  * @param[in] id Block interrupt ID.
  * @return
- * - ERR_OK on success
- * - ERR_SPI_ID if the interrupt ID is invalid
+ * - 0 on success
+ * - -ERANGE if the interrupt ID is invalid
+ * - -EINVAL if the interrupt ID is unsupported
+ * - -ENODEV if the GIC base pointers are not available
  */
-socfpga_interrupt_err_t interrupt_spi_disable(socfpga_hpu_interrupt_t id);
+int interrupt_disable(socfpga_hpu_interrupt_t id);
 
 /**
  * @brief Register an ISR for a specific interrupt ID.
@@ -422,11 +419,11 @@ socfpga_interrupt_err_t interrupt_spi_disable(socfpga_hpu_interrupt_t id);
  * @param[in] callback Callback function to be invoked when the interrupt occurs.
  * @param[in] user_data Data to be passed to the callback function.
  * @return
- * - ERR_OK on success
- * - ERR_SPI_ID if the interrupt ID is invalid
- * - ERR_INTERRUPT_CALLBACK if the callback is NULL
+ * - 0 on success
+ * - -ERANGE if the interrupt ID is invalid
+ * - -EINVAL if the callback is NULL
  */
-socfpga_interrupt_err_t interrupt_register_isr(socfpga_hpu_interrupt_t id,
+int interrupt_register_isr(socfpga_hpu_interrupt_t id,
         socfpga_interrupt_callback_t callback, void *user_data);
 
 /**
@@ -437,24 +434,27 @@ socfpga_interrupt_err_t interrupt_register_isr(socfpga_hpu_interrupt_t id,
  * @param[in] priority Priority of the interrupt.
  * @param[in] gic_redis_id Redistributor ID.
  * @return
- * - ERR_OK on success
- * - ERR_PPI_ID if the interrupt ID is invalid
+ * - 0 on success
+ * - -ERANGE if the interrupt ID is invalid
+ * - -EINVAL if the parameters are invalid
+ * - -ENODEV if the GIC base pointers are not available
  */
-socfpga_interrupt_err_t interrupt_ppi_enable(socfpga_hpu_interrupt_t id,
+int interrupt_ppi_enable(socfpga_hpu_interrupt_t id,
         socfpga_hpu_interrupt_type_t interrupt_type, uint8_t priority,
         uint32_t gic_redis_id);
 
 /**
- * @brief Enable interrupt for a specific block
+ * @brief Enable interrupt for a specific block.
  *
  * @param[in] id Block interrupt ID.
  * @param[in] priority Priority of the interrupt.
  * @return
- * - ERR_OK on success
- * - ERR_SPI_ID if the SPI interrupt ID is invalid
- * - ERR_PPI_ID if the PPI interrupt ID is invalid
+ * - 0 on success
+ * - -ERANGE if the SPI or PPI interrupt ID is invalid
+ * - -EINVAL if the parameters are invalid
+ * - -ENODEV if the GIC base pointers are not available
  */
-socfpga_interrupt_err_t interrupt_enable(socfpga_hpu_interrupt_t id,
+int interrupt_enable(socfpga_hpu_interrupt_t id,
         uint8_t priority);
 
 /** @} */

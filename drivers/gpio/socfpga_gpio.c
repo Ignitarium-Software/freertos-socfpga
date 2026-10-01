@@ -132,7 +132,7 @@ static bool gpio_set_interrupt(gpio_pin_t pin, gpio_int_t type)
 {
     socfpga_hpu_interrupt_t id;
     uint8_t gpio_inst;
-    socfpga_interrupt_err_t int_ret;
+    int err;
     if (pin < GPIO_NPIN_PER_REG)
     {
         id = GPIO0IRQ;
@@ -143,8 +143,8 @@ static bool gpio_set_interrupt(gpio_pin_t pin, gpio_int_t type)
         id = GPIO1IRQ;
         gpio_inst = 1;
     }
-    int_ret = interrupt_register_isr(id, gpio_irq_handler, &gpio_inst);
-    if (int_ret != ERR_OK)
+    err = interrupt_register_isr(id, gpio_irq_handler, &gpio_inst);
+    if (err != 0)
     {
         return false;
     }
@@ -185,8 +185,8 @@ static bool gpio_set_interrupt(gpio_pin_t pin, gpio_int_t type)
     }
     if (type != GPIO_INT_NONE)
     {
-        int_ret = interrupt_enable(id, GIC_INTERRUPT_PRIORITY_GPIO);
-        if (int_ret != ERR_OK)
+        err = interrupt_enable(id, GIC_INTERRUPT_PRIORITY_GPIO);
+        if (err != 0)
         {
             return false;
         }

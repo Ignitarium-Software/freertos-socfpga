@@ -1,11 +1,12 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
  * Driver implementation for GIC
  */
 
+#include <errno.h>
 #include <string.h>
 #include "osal_log.h"
 #include "osal.h"
@@ -24,34 +25,34 @@
 #define INTERRUPT_MAKE_PRIORITY(x)    (((uint32_t)(x) << portPRIORITY_SHIFT) & 0xFFU)
 
 static struct gic_v3_dist_if *gic_dist;
-static struct gic_v3_rdist_if *gic_rdist;
+static struct gic_v3_rdist_if *gic_redis;
 
-static uint32_t gic_max_rd = 0U;
+static uint32_t gic_max_redis = 0U;
 
 /*
  * @func gic_enable_gic
  * @brief Function to enable the GIC and configure the base address of GIC controller
  */
-int32_t gic_enable_gic(void)
+int gic_enable_gic(void)
 {
 
-    uint32_t index = 0U;
+    uint32_t idx = 0U;
 
     gic_dist = (struct gic_v3_dist_if *)((void *)REGISTER_SOCFPGA_DIST_BASE_ADDR);
-    gic_rdist = (struct gic_v3_rdist_if *)((void *)REGISTER_SOCFPGA_RD_BASE_ADDR);
+    gic_redis = (struct gic_v3_rdist_if *)((void *)REGISTER_SOCFPGA_REDIS_BASE_ADDR);
 
     if (gic_dist == NULL)
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
-    while ((gic_rdist[index].lpis.GICR_TYPER[0] & (1U << 4U)) == 0U)      /* Keep incrementing until GICR_TYPER.Last reports no more RDs in block */
+    while ((gic_redis[idx].lpis.GICR_TYPER[0] & (1U << 4U)) == 0U)      /* Keep incrementing until GICR_TYPER.Last reports no more redistributors in block */
 
     {
-        index++;
+        idx++;
     }
 
-    gic_max_rd = index;
+    gic_max_redis = idx;
 
     /* First set the ARE bits */
     gic_dist->GICD_CTLR = INTERRUPT_DCTRL_ARE_S | INTERRUPT_DCTRL_ARE_NS |
@@ -65,58 +66,58 @@ int32_t gic_enable_gic(void)
             INTERRUPT_DCTRL_ENG1S | INTERRUPT_DCTRL_ARE_S |
             INTERRUPT_DCTRL_ARE_NS | INTERRUPT_DCTRL_DS;
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
 /*
  * @brief
  */
-int32_t gic_get_redist_id(uint32_t affinity)
+int gic_get_redis_id(uint32_t affinity)
 {
-    int32_t index = 0;
+    int32_t idx = 0;
 
-    if (gic_rdist == NULL)
+    if (gic_redis == NULL)
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
     do
     {
-        if (gic_rdist[index].lpis.GICR_TYPER[1] == affinity)
+        if (gic_redis[idx].lpis.GICR_TYPER[1] == affinity)
         {
-            return index;
+            return idx;
         }
-        index++;
-    } while ((uint32_t)index <= gic_max_rd);
+        idx++;
+    } while ((uint32_t)idx <= gic_max_redis);
 
-    return INTERRUPT_RETURN_ERROR; /* return -1 to signal not RD found */
+    return -ENOENT;
 }
 
 /*
  * @brief
  */
-int32_t gic_wakeup_redist(uint32_t rd)
+int gic_wakeup_redis(uint32_t idx)
 {
     uint32_t tmp;
 
-    if (gic_rdist == NULL)
+    if (gic_redis == NULL)
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
     /* Tell the Redistributor to wake-up by clearing ProcessorSleep bit */
-    tmp = gic_rdist[rd].lpis.GICR_WAKER;
+    tmp = gic_redis[idx].lpis.GICR_WAKER;
     tmp = tmp & ~0x2U;
-    gic_rdist[rd].lpis.GICR_WAKER = tmp;
+    gic_redis[idx].lpis.GICR_WAKER = tmp;
 
 
     /* Poll ChildrenAsleep bit until Redistributor wakes */
     do
     {
-        tmp = gic_rdist[rd].lpis.GICR_WAKER;
+        tmp = gic_redis[idx].lpis.GICR_WAKER;
     } while ((tmp & 0x4U) != 0U);
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
 static uint32_t gic_is_valid_ext_spi(uint32_t id)
@@ -159,28 +160,28 @@ static uint32_t gic_is_valid_ext_spi(uint32_t id)
 /*
  * @brief Set the GIC interrupt priority
  */
-int32_t gic_set_int_priority(uint32_t id, uint32_t rd, uint8_t priority)
+int gic_set_int_priority(uint32_t id, uint32_t idx, uint8_t priority)
 {
     /* Check if the priority is within the bounds */
     if ((priority & 0xF0U) == 0xF0U)
     {
-        return INTERRUPT_RETURN_INVALID_PRIORITY;
+        return -EINVAL;
     }
 
-    if ((gic_rdist == NULL) || (gic_dist == NULL))
+    if ((gic_redis == NULL) || (gic_dist == NULL))
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
     if (id < 31U)
     {
-        /* Check rd in range */
-        if (rd > gic_max_rd)
+        /* Check idx in range */
+        if (idx > gic_max_redis)
         {
-            return INTERRUPT_RETURN_INVALID_RDIST;
+            return -ERANGE;
         }
         /* SGI or PPI */
-        gic_rdist[rd].sgis.GICR_IPRIORITYR[id] = (uint8_t)INTERRUPT_MAKE_PRIORITY(priority);
+        gic_redis[idx].sgis.GICR_IPRIORITYR[id] = (uint8_t)INTERRUPT_MAKE_PRIORITY(priority);
     }
     else if (id < 1020U)
     {
@@ -188,7 +189,7 @@ int32_t gic_set_int_priority(uint32_t id, uint32_t rd, uint8_t priority)
         /* similar checks are to avoid numeric overflow violation in static analysis */
         if (id == 31U)
         {
-            return INTERRUPT_RETURN_INVALID_SPI;
+            return -ERANGE;
         }
 
         id -= 32U; /* Adjust ID for Distributor registers */
@@ -202,21 +203,21 @@ int32_t gic_set_int_priority(uint32_t id, uint32_t rd, uint8_t priority)
     }
     else if ((id > 1055U) && (id < 1120U))
     {
-        return INTERRUPT_RETURN_INVALID_ID;
+        return -ERANGE;
     }
     else if ((id > 4095U) && (id < 5120U))
     {
-        return INTERRUPT_RETURN_INVALID_ID;
+        return -ERANGE;
     }
     else
     {
-        return INTERRUPT_RETURN_INVALID_ID;
+        return -ERANGE;
     }
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
-int32_t gic_set_int_group(uint32_t id, uint32_t rd, uint32_t security)
+int gic_set_int_group(uint32_t id, uint32_t idx, uint32_t security)
 {
     uint32_t bank, group, mod, ret = 0U;
 
@@ -224,25 +225,25 @@ int32_t gic_set_int_group(uint32_t id, uint32_t rd, uint32_t security)
     /* put debug print here */
 #endif
 
-    if ((gic_rdist == NULL) || (gic_dist == NULL))
+    if ((gic_redis == NULL) || (gic_dist == NULL))
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
     if (id < 31U)
     {
-        /* Check rd in range */
-        if (rd > gic_max_rd)
+        /* Check idx in range */
+        if (idx > gic_max_redis)
         {
-            return INTERRUPT_RETURN_INVALID_RDIST;
+            return -ERANGE;
         }
 
         /* SGI or PPI */
         id = 1U << id;
 
         /* Read current values */
-        group = gic_rdist[rd].sgis.GICR_IGROUPR0;
-        mod = gic_rdist[rd].sgis.GICR_IGRPMODR0;
+        group = gic_redis[idx].sgis.GICR_IGROUPR0;
+        mod = gic_redis[idx].sgis.GICR_IGRPMODR0;
 
         /* Update required bits */
         switch (security)
@@ -268,18 +269,18 @@ int32_t gic_set_int_group(uint32_t id, uint32_t rd, uint32_t security)
         }
         if (ret == 1U)
         {
-            return INTERRUPT_RETURN_INVALID_GROUP;
+            return -EINVAL;
         }
 
         /* Write modified version back */
-        gic_rdist[rd].sgis.GICR_IGROUPR0 = group;
-        gic_rdist[rd].sgis.GICR_IGRPMODR0 = mod;
+        gic_redis[idx].sgis.GICR_IGROUPR0 = group;
+        gic_redis[idx].sgis.GICR_IGRPMODR0 = mod;
     }
     else if (id < 1020U)
     {
         if (id == 31U)
         {
-            return INTERRUPT_RETURN_INVALID_SPI;
+            return -ERANGE;
         }
 
         id -= 32U; /* Adjust ID for Distributor registers */
@@ -315,7 +316,7 @@ int32_t gic_set_int_group(uint32_t id, uint32_t rd, uint32_t security)
         }
         if (ret == 2U)
         {
-            return INTERRUPT_RETURN_INVALID_GROUP;
+            return -EINVAL;
         }
 
         gic_dist->GICD_IGROUPR[bank] = group;
@@ -324,10 +325,10 @@ int32_t gic_set_int_group(uint32_t id, uint32_t rd, uint32_t security)
     else
     {
         /* Unknown or unsupported uID */
-        return INTERRUPT_RETURN_INVALID_ID;
+        return -ERANGE;
     }
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
 #define GICV3_ROUTE_AFF3_SHIFT    (8)
@@ -339,7 +340,7 @@ int32_t gic_set_int_group(uint32_t id, uint32_t rd, uint32_t security)
  * @param[in] mode Routing mode
  * @param[in] affinity  Affinity co-ordinate of target
  */
-int32_t gic_set_int_route(uint32_t id, uint32_t mode, uint32_t affinity)
+int gic_set_int_route(uint32_t id, uint32_t mode, uint32_t affinity)
 {
     uint64_t tmp;
 
@@ -349,7 +350,7 @@ int32_t gic_set_int_route(uint32_t id, uint32_t mode, uint32_t affinity)
 
     if (gic_dist == NULL)
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
     /* Check for SPI ranges */
@@ -360,13 +361,13 @@ int32_t gic_set_int_route(uint32_t id, uint32_t mode, uint32_t affinity)
         if ((id <= 4095U) || (id >= 5120U))
         {
             /* Not a GICv3.1 SPI either */
-            return INTERRUPT_RETURN_INVALID_SPI;
+            return -ERANGE;
         }
 
         /* Check Ext SPI implemented */
         if (gic_is_valid_ext_spi(id) == 0U)
         {
-            return INTERRUPT_RETURN_INVALID_SPI;
+            return -ERANGE;
         }
     }
 
@@ -380,26 +381,26 @@ int32_t gic_set_int_route(uint32_t id, uint32_t mode, uint32_t affinity)
         gic_dist->GICD_IROUTER[id] = tmp;
     }
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
 /* Interrupt configuration */
 
-int32_t gic_enable_int(uint32_t id, uint32_t rd)
+int gic_enable_int(uint32_t id, uint32_t idx)
 {
     uint32_t bank;
 
-    if ((gic_rdist == NULL) || (gic_dist == NULL))
+    if ((gic_redis == NULL) || (gic_dist == NULL))
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
     if (id < 32U)
     {
-        /* Check rd in range */
-        if (rd > gic_max_rd)
+        /* Check idx in range */
+        if (idx > gic_max_redis)
         {
-            return INTERRUPT_RETURN_INVALID_RDIST;
+            return -ERANGE;
         }
 
         if( id < 16 )
@@ -408,15 +409,15 @@ int32_t gic_enable_int(uint32_t id, uint32_t rd)
              * Clearing any SGIs used to yield the core, as enabling
              * the interrupt may cause it to run a task prematurely
              */
-            gic_rdist[rd].sgis.GICR_ICPENDR0 |= (1U << id);
+            gic_redis[idx].sgis.GICR_ICPENDR0 |= (1U << id);
         }
-        gic_rdist[rd].sgis.GICR_ISENABLER0 = (1U << id);
+        gic_redis[idx].sgis.GICR_ISENABLER0 = (1U << id);
     }
     else if (id < 1020U)
     {
         if (id == 31U)
         {
-            return INTERRUPT_RETURN_INVALID_SPI;
+            return -ERANGE;
         }
 
         id -= 32U; /* Adjust ID for Distributor registers */
@@ -433,39 +434,39 @@ int32_t gic_enable_int(uint32_t id, uint32_t rd)
 #ifdef DEBUG
         ERROR("enableInt:: ERROR - Invalid or unsupported interrupt.");
 #endif
-        return INTERRUPT_RETURN_ERROR;
+        return -EINVAL;
     }
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
-int32_t gic_disable_int(uint32_t id, uint32_t rd)
+int gic_disable_int(uint32_t id, uint32_t idx)
 {
     uint32_t bank;
 
-    if ((gic_rdist == NULL) || (gic_dist == NULL))
+    if ((gic_redis == NULL) || (gic_dist == NULL))
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
     if (id < 31U)
     {
-        //* Check rd in range */
-        if (rd > gic_max_rd)
+        //* Check idx in range */
+        if (idx > gic_max_redis)
         {
-            return 1;
+            return -ERANGE;
         }
         /* SGI or PPI */
         id = id & 0x1fU;    /* ... and which bit within the register */
         id = 1U << id;      /* Move a '1' into the correct bit position */
 
-        gic_rdist[rd].sgis.GICR_ICENABLER0 = id;
+        gic_redis[idx].sgis.GICR_ICENABLER0 = id;
     }
     else if (id < 1020U)
     {
         if (id == 31U)
         {
-            return INTERRUPT_RETURN_INVALID_SPI;
+            return -ERANGE;
         }
 
         id -= 32U; /* Adjust ID for Distributor registers */
@@ -482,19 +483,19 @@ int32_t gic_disable_int(uint32_t id, uint32_t rd)
 #ifdef DEBUG
         /* put debug print here */
 #endif
-        return INTERRUPT_RETURN_ERROR;
+        return -EINVAL;
     }
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
-int32_t gic_set_int_type(uint32_t id, uint32_t rd, uint32_t type)
+int gic_set_int_type(uint32_t id, uint32_t idx, uint32_t type)
 {
     uint32_t bank, tmp, conf;
 
-    if ((gic_dist == NULL) || (gic_rdist == NULL))
+    if ((gic_dist == NULL) || (gic_redis == NULL))
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
 #ifdef DEBUG
@@ -510,14 +511,14 @@ int32_t gic_set_int_type(uint32_t id, uint32_t rd, uint32_t type)
         }
         else
         {
-            gic_rdist[rd].sgis.GICR_ICFGR[1] = (type & 0x3U) << ((id - 16U) << 1U);
+            gic_redis[idx].sgis.GICR_ICFGR[1] = (type & 0x3U) << ((id - 16U) << 1U);
         }
     }
     else if (id < 1020U)
     {
         if (id == 31U)
         {
-            return INTERRUPT_RETURN_INVALID_SPI;
+            return -ERANGE;
         }
 
         id -= 32U; /* Adjust ID for Distributor registers */
@@ -537,36 +538,36 @@ int32_t gic_set_int_type(uint32_t id, uint32_t rd, uint32_t type)
     }
     else
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -EINVAL;
     }
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
-int32_t gic_clear_int_pending(uint32_t id, uint32_t rd)
+int gic_clear_int_pending(uint32_t id, uint32_t idx)
 {
     uint32_t bank;
 
-    if ((gic_dist == NULL) || (gic_rdist == NULL))
+    if ((gic_dist == NULL) || (gic_redis == NULL))
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
     if (id < 31U)
     {
-        /* Check rd in range */
-        if (rd > gic_max_rd)
+        /* Check idx in range */
+        if (idx > gic_max_redis)
         {
-            return 1;
+            return -ERANGE;
         }
 
-        gic_rdist[rd].sgis.GICR_ICPENDR0 |= (1U << id);
+        gic_redis[idx].sgis.GICR_ICPENDR0 |= (1U << id);
     }
     else if (id < 1020U)
     {
         if (id == 31U)
         {
-            return INTERRUPT_RETURN_INVALID_SPI;
+            return -ERANGE;
         }
 
         id -= 32U; /* Adjust ID for Distributor registers */
@@ -580,45 +581,45 @@ int32_t gic_clear_int_pending(uint32_t id, uint32_t rd)
     }
     else
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -EINVAL;
     }
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
 /* Interrupt state */
 
-int32_t gic_set_int_pending(uint32_t id, uint32_t rd)
+int gic_set_int_pending(uint32_t id, uint32_t idx)
 {
     uint32_t bank;
 
     /* Adjust for SPI */
     id -= 32U;
 
-    if ((gic_dist == NULL) || (gic_rdist == NULL))
+    if ((gic_dist == NULL) || (gic_redis == NULL))
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -ENODEV;
     }
 
     if (id < 31U)
     {
-        /* Check rd in range */
-        if (rd > gic_max_rd)
+        /* Check idx in range */
+        if (idx > gic_max_redis)
         {
-            return 1;
+            return -ERANGE;
         }
 
         id = id & 0x1fU;    /* Find which bit within the register */
         id = 1U << id;      /* Move a '1' into the correct bit position */
 
-        gic_rdist[rd].sgis.GICR_ISPENDR0 |= id;
+        gic_redis[idx].sgis.GICR_ISPENDR0 |= id;
 
     }
     else if (id < 1020U)
     {
         if (id == 31U)
         {
-            return INTERRUPT_RETURN_INVALID_SPI;
+            return -ERANGE;
         }
 
         id -= 32U; /* Adjust ID for Distributor registers */
@@ -632,10 +633,10 @@ int32_t gic_set_int_pending(uint32_t id, uint32_t rd)
     }
     else
     {
-        return INTERRUPT_RETURN_ERROR;
+        return -EINVAL;
     }
 
-    return INTERRUPT_RETURN_SUCCESS;
+    return 0;
 }
 
 void gic_enable_interrupts(void)

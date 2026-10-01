@@ -220,7 +220,7 @@ int _write( int file,
 {
     ( void ) file;
     int lock_recur_cnt = 0;
-    int written = console_fill_buffer( ( unsigned char * const ) ptr, len );
+    int written = console_fill_buf( ( unsigned char * const ) ptr, len );
 
     do
     {

@@ -56,17 +56,17 @@ void disable_xhci_interrupts(void)
 
 bool register_usb3ISR(xhci_int_ptr_t int_handler)
 {
-    socfpga_interrupt_err_t intr_ret;
+    int err;
 
-    intr_ret = interrupt_register_isr(USB1IRQ, socfpga_usb3_handler,
+    err = interrupt_register_isr(USB1IRQ, socfpga_usb3_handler,
             int_handler);
-    if (intr_ret != ERR_OK)
+    if (err != 0)
     {
         return false;
     }
 
-    intr_ret = interrupt_enable(USB1IRQ, GIC_INTERRUPT_PRIORITY_USB3);
-    if (intr_ret != ERR_OK)
+    err = interrupt_enable(USB1IRQ, GIC_INTERRUPT_PRIORITY_USB3);
+    if (err != 0)
     {
         ERROR("Failed to enable interrupt");
         return false;

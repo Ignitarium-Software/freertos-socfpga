@@ -116,7 +116,6 @@ typedef struct wdt_descriptor *wdt_handle_t;
  * @note TimeoutTime specifies the duration for the watchdog timer.
  *       The timer begins counting after the initial timeout period is triggered.
  *
- * @warning the InitTimeoutTime must be greater than or equal to the TimeoutTime
  */
 typedef enum
 {
@@ -171,8 +170,8 @@ wdt_handle_t wdt_open(uint32_t instance);
 /**
  * @brief wdt_start is used to start the WatchDog timer counter.
  *        WatchDog expiry (timeout) time must be set before starting the WatchDog counter.
- *        Use the eSetWatchdogInitTimeout IOCTL to set the initial timeout period and
- *        the eSetWatchdogTimeout IOCTL to define the regular timeout duration.
+ *        Use the WDT_SET_INIT_TIMEOUT IOCTL to set the initial timeout period and
+ *        the WDT_SET_TIMEOUT IOCTL to define the regular timeout duration.
  *
  * @param[in] hwdt handle to WatchDog interface returned in
  *                 wdt_open.
@@ -227,11 +226,12 @@ int32_t wdt_restart(const wdt_handle_t hwdt);
  *        generate interrupt. The caller must set the timers using
  *        IOCTL and start the timer for the callback to be called back.
  *
- * @note A single callback is assigned per instance when eWdtTimeoutInterrupt is configured either
- *       for the initial timeout or upon expiry of the WatchDog counter's timeout period.
+ * @note A single callback is assigned per instance when timeout behaviour is set to interrupt
+ *       (see #WDT_SET_TIMEOUT_BEHAVIOUR with #WDT_TIMEOUT_INTR) either for the initial timeout or
+ *       upon expiry of the WatchDog counter's timeout period.
  * @note Newly set callback overrides the one previously set
  *
- * @warning If input handle or if callback function is NULL, this function silently takes no action.
+ * @warning If callback function is NULL, this function clears any previously set callback.
  *
  * @param[in] hwdt     handle to WatchDog interface returned in
  *                     wdt_open.

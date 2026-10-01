@@ -28,11 +28,11 @@ struct wdt_descriptor
 
 static struct wdt_descriptor wdt_descriptors[MAX_WATCHDOG_INSTANCES];
 
-static void de_assert_reset_signal(uint32_t instance);
+static void de_assert_reset(uint32_t instance);
 
 void wdt_isr(void *pvhandle);
 
-static bool set_response_mode(wdt_handle_t handle, wdt_timeout_config_t config);
+static int32_t set_response_mode(wdt_handle_t handle, wdt_timeout_config_t config);
 static uint32_t ms_to_top(uint64_t clk_hz, uint32_t timeout_ms);
 static uint32_t top_to_ms(uint64_t clk_hz, uint8_t top);
 
@@ -50,9 +50,9 @@ wdt_handle_t wdt_open(uint32_t instance)
 
     handle = &wdt_descriptors[instance];
     handle->instance = instance;
-    de_assert_reset_signal(instance);
+    de_assert_reset(instance);
 
-    if ((handle->is_open) == 1)
+    if ((handle->is_open) != 0U)
     {
         ERROR("Watchdog instance is already open");
         return NULL;
@@ -60,7 +60,6 @@ wdt_handle_t wdt_open(uint32_t instance)
     else
     {
         handle->base_addr = GET_WDT_BASE_ADDRESS(instance);
-        handle->is_open = 1;
 
         /*Get the source clock value in Hz*/
         if (clk_mngr_get_clk(CLOCK_WDT, &clk_hz) == 1U)
@@ -68,6 +67,7 @@ wdt_handle_t wdt_open(uint32_t instance)
             ERROR("Error while getting clock");
             return NULL;
         }
+        handle->is_open = 1;
         handle->clk_hz = clk_hz;
         return handle;
     }
@@ -75,7 +75,7 @@ wdt_handle_t wdt_open(uint32_t instance)
 
 int32_t wdt_start(const wdt_handle_t hwdt)
 {
-    uint32_t val;
+    uint32_t val = 0U;
     if (hwdt == NULL)
     {
         ERROR("Invalid watchdog handle");
@@ -97,12 +97,20 @@ int32_t wdt_start(const wdt_handle_t hwdt)
 
 int32_t wdt_stop(const wdt_handle_t hwdt)
 {
-    uint32_t val;
+    uint32_t val = 0U;
     if (hwdt == NULL)
     {
         ERROR("Invalid watchdog handle");
         return -EINVAL;
     }
+
+    if (hwdt->is_open == 0)
+    {
+        ERROR("Watchdog instance is not open");
+        return -EINVAL;
+    }
+
+    hwdt->is_config_done = 0;
 
     val = RD_REG32((uint32_t)hwdt->base_addr + WDT_CR);
     val &= ~(1U << WDT_CR_WDT_EN_POS);
@@ -114,7 +122,7 @@ int32_t wdt_stop(const wdt_handle_t hwdt)
 
 int32_t wdt_restart(const wdt_handle_t hwdt)
 {
-    uint32_t val;
+    uint32_t val = 0U;
 
     if (hwdt == NULL)
     {
@@ -135,27 +143,34 @@ int32_t wdt_restart(const wdt_handle_t hwdt)
     return 0;
 }
 
-int32_t wdt_ioctl(const wdt_handle_t hwdt, wdt_ioctl_t cmd, void *const buf)
+int32_t wdt_ioctl(const wdt_handle_t hwdt, wdt_ioctl_t cmd, void *const param)
 {
-    uint32_t val;
-    uint32_t timeout_ms;
-    uint32_t timeout;
+    uint32_t val = 0U;
+    uint32_t timeout_ms = 0U;
+    uint32_t timeout = 0U;
 
     int32_t ret = 0;
-    if ((hwdt == NULL) || (buf == NULL))
+    if ((hwdt == NULL) || (param == NULL))
     {
         ERROR("Invalid parameters");
+        return -EINVAL;
+    }
+
+    if (hwdt->is_open == 0)
+    {
+        ERROR("Watchdog instance is not open");
         return -EINVAL;
     }
 
     switch (cmd)
     {
         case WDT_SET_INIT_TIMEOUT:
-            timeout_ms = *(uint32_t *)buf;
+            timeout_ms = *(uint32_t *)param;
             timeout = ms_to_top(hwdt->clk_hz, timeout_ms);
             val = RD_REG32(hwdt->base_addr + WDT_TORR);
+
             val &= ~(WDT_TORR_TOP_INIT_MASK);
-            val |= (timeout << WDT_TORR_TOP_INIT_POS);
+            val |= ((timeout << WDT_TORR_TOP_INIT_POS) & WDT_TORR_TOP_INIT_MASK);
             WR_REG32(hwdt->base_addr + WDT_TORR, val);
             hwdt->is_config_done |= 0x1;
             break;
@@ -165,16 +180,23 @@ int32_t wdt_ioctl(const wdt_handle_t hwdt, wdt_ioctl_t cmd, void *const buf)
             val = ((val & WDT_TORR_TOP_INIT_MASK) >> WDT_TORR_TOP_INIT_POS);
 
             timeout_ms = top_to_ms(hwdt->clk_hz, val);
-            *(uint32_t *)buf = timeout_ms;
+            *(uint32_t *)param = timeout_ms;
             break;
 
         case WDT_SET_TIMEOUT:
 
-            timeout_ms = *(uint32_t *)buf;
+            timeout_ms = *(uint32_t *)param;
+            if (timeout_ms == 0U)
+            {
+                ERROR("Invalid timeout: must be > 0 ms");
+                ret = -EINVAL;
+                break;
+            }
             timeout = ms_to_top(hwdt->clk_hz, timeout_ms);
             val = RD_REG32(hwdt->base_addr + WDT_TORR);
+
             val &= ~(WDT_TORR_TOP_MASK);
-            val |= (timeout << WDT_TORR_TOP_POS);
+            val |= ((timeout << WDT_TORR_TOP_POS) & WDT_TORR_TOP_MASK);
             WR_REG32(hwdt->base_addr + WDT_TORR, val);
             hwdt->is_config_done |= 0x2;
 
@@ -184,25 +206,32 @@ int32_t wdt_ioctl(const wdt_handle_t hwdt, wdt_ioctl_t cmd, void *const buf)
             val = RD_REG32(hwdt->base_addr + WDT_TORR);
             val &= WDT_TORR_TOP_MASK;
             timeout_ms = top_to_ms(hwdt->clk_hz, val);
-            *(uint32_t *)buf = timeout_ms;
+            *(uint32_t *)param = timeout_ms;
             break;
 
         case WDT_GET_STATUS:
 
-            uint32_t stat = RD_REG32(
-                    hwdt->base_addr + WDT_STAT);
-            if (stat == 1U)
+            val = RD_REG32(hwdt->base_addr + WDT_CR);
+            if ((val & WDT_CR_WDT_EN_MASK) == 0U)
             {
-                *(wdt_status_t *)buf = WDT_EXPIRED;
+                *(wdt_status_t *)param = WDT_STOPPED;
             }
             else
             {
-                *(wdt_status_t *)buf = WDT_RUNNING;
+                val = RD_REG32(hwdt->base_addr + WDT_STAT);
+                if ((val & WDT_STAT_WDT_STAT_MASK) != 0U)
+                {
+                    *(wdt_status_t *)param = WDT_EXPIRED;
+                }
+                else
+                {
+                    *(wdt_status_t *)param = WDT_RUNNING;
+                }
             }
             break;
 
         case WDT_SET_TIMEOUT_BEHAVIOUR:
-            if (set_response_mode(hwdt, *(wdt_timeout_config_t *)buf) == false)
+            if (set_response_mode(hwdt, *(wdt_timeout_config_t *)param) != 0)
             {
                 ERROR("Failed to set response mode");
                 ret = -EINVAL;
@@ -223,6 +252,12 @@ void wdt_set_callback(const wdt_handle_t hwdt, wdt_callback_t callback,
     if (hwdt == NULL)
     {
         ERROR("Invalid watchdog handle");
+        return;
+    }
+
+    if (hwdt->is_open == 0)
+    {
+        ERROR("Watchdog instance is not open");
         return;
     }
     hwdt->callback = callback;
@@ -260,6 +295,14 @@ void wdt_isr(void *handle)
 {
     wdt_handle_t hwdt = (wdt_handle_t)handle;
 
+    if (hwdt == NULL)
+    {
+        return;
+    }
+
+    /* Read the EOI register to clear interrupt */
+    RD_REG32(hwdt->base_addr + WDT_EOI);
+
     if (hwdt->callback != NULL)
     {
         hwdt->callback(hwdt->cb_usercontext);
@@ -269,13 +312,17 @@ void wdt_isr(void *handle)
 
 
 /**
- * @brief Set the response mode as system reset or generate interrupt and reset the system
+ * @brief Configure watchdog timeout response mode
+ *
+ * When configured for interrupt mode, the first timeout asserts an interrupt and
+ * reloads the counter; if software does not clear/service the interrupt before
+ * the next timeout, the watchdog then triggers a system reset.
  */
-static bool set_response_mode(wdt_handle_t handle, wdt_timeout_config_t config)
+static int32_t set_response_mode(wdt_handle_t handle, wdt_timeout_config_t config)
 {
-    uint32_t val;
+    uint32_t val = 0U;
     socfpga_hpu_interrupt_t interrupt_id;
-    socfpga_interrupt_err_t int_ret;
+    int err;
 
     if (config == WDT_TIMEOUT_INTR)
     {
@@ -284,15 +331,15 @@ static bool set_response_mode(wdt_handle_t handle, wdt_timeout_config_t config)
         WR_REG32(handle->base_addr + WDT_CR, val);
 
         interrupt_id = get_intr_id(handle->instance);
-        int_ret = interrupt_enable(interrupt_id, GIC_INTERRUPT_PRIORITY_WDOG);
-        if (int_ret != ERR_OK)
+        err = interrupt_enable(interrupt_id, GIC_INTERRUPT_PRIORITY_WDOG);
+        if (err != 0)
         {
-            return false;
+            return -EIO;
         }
-        int_ret = interrupt_register_isr(interrupt_id, wdt_isr, handle);
-        if (int_ret != ERR_OK)
+        err = interrupt_register_isr(interrupt_id, wdt_isr, handle);
+        if (err != 0)
         {
-            return false;
+            return -EIO;
         }
     }
     else
@@ -301,7 +348,7 @@ static bool set_response_mode(wdt_handle_t handle, wdt_timeout_config_t config)
         val &= ~(1U << WDT_CR_RMOD_POS);
         WR_REG32(handle->base_addr + WDT_CR, val);
     }
-    return true;
+    return 0;
 }
 
 
@@ -346,9 +393,9 @@ socfpga_hpu_interrupt_t get_intr_id(uint32_t instance)
 /**
  * @brief Deassert the reset signal for the Watchdog instance
  */
-static void de_assert_reset_signal(uint32_t instance)
+static void de_assert_reset(uint32_t instance)
 {
-    uint32_t val;
+    uint32_t val = 0U;
     if (instance == 0U)
     {
         val = RD_REG32(SOCFPGA_RESET_MANAGER_BASE + WDT_PER1MODRST_OFFSET);
@@ -356,28 +403,28 @@ static void de_assert_reset_signal(uint32_t instance)
         WR_REG32(SOCFPGA_RESET_MANAGER_BASE + WDT_PER1MODRST_OFFSET, val);
     }
 
-    if (instance == 1U)
+    else if (instance == 1U)
     {
         val = RD_REG32(SOCFPGA_RESET_MANAGER_BASE + WDT_PER1MODRST_OFFSET);
         val &= ~(1U << WDT1_RESET_BIT);
         WR_REG32(SOCFPGA_RESET_MANAGER_BASE + WDT_PER1MODRST_OFFSET, val);
     }
 
-    if (instance == 2U)
+    else if (instance == 2U)
     {
         val = RD_REG32(SOCFPGA_RESET_MANAGER_BASE + WDT_PER1MODRST_OFFSET);
         val &= ~(1U << WDT2_RESET_BIT);
         WR_REG32(SOCFPGA_RESET_MANAGER_BASE + WDT_PER1MODRST_OFFSET, val);
     }
 
-    if (instance == 3U)
+    else if (instance == 3U)
     {
         val = RD_REG32(SOCFPGA_RESET_MANAGER_BASE + WDT_PER1MODRST_OFFSET);
         val &= ~(1U << WDT3_RESET_BIT);
         WR_REG32(SOCFPGA_RESET_MANAGER_BASE + WDT_PER1MODRST_OFFSET, val);
     }
 
-    if (instance == 4U)
+    else if (instance == 4U)
     {
         val = RD_REG32(SOCFPGA_RESET_MANAGER_BASE + WDT_PER1MODRST_OFFSET);
         val &= ~((uint32_t)1U << WDT4_RESET_BIT);

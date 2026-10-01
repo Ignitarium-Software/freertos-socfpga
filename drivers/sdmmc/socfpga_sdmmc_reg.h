@@ -782,8 +782,6 @@
 #define SDMMC_SRS17_UHSII_POS                   3U
 #define SDMMC_SRS17_DDR50_MASK                  0x00000004U
 #define SDMMC_SRS17_DDR50_POS                   2U
-#define SDMMC_SRS17_SDR104_MASK                 0x00000002U
-#define SDMMC_SRS17_SDR104_POS                  1U
 #define SDMMC_SRS17_SDR50_MASK                  0x00000001U
 #define SDMMC_SRS17_SDR50_POS                   0U
 

@@ -1,5 +1,5 @@
 /*
- * SPDX-FileCopyrightText: Copyright (C) 2025 Altera Corporation
+ * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
  * SPDX-License-Identifier: MIT-0
  *
@@ -7,6 +7,7 @@
  */
 
 
+#include <errno.h>
 #include "socfpga_interrupt.h"
 #include "arm_gic.h"
 #include "arm_gic_reg.h"
@@ -48,21 +49,25 @@ void gic_default_interrupt_handler(void *data) {
 
 void interrupt_enable_core_redis(void)
 {
-    /* Get the ID of the Redistributor connected to this PE. */
-    uint32_t gic_redis_id = (uint32_t)gic_get_redist_id(
-            (uint32_t)gic_reg_get_cpu_affinity());
+    /* Get the ID of the redistributor connected to this PE. */
+    int32_t gic_redis_id = gic_get_redis_id(
+            (uint32_t)gic_get_cpu_affinity());
+    if (gic_redis_id < 0)
+    {
+        return;
+    }
 
     /* Mark this core as being active. */
-    if (gic_wakeup_redist(gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
+    if (gic_wakeup_redis((uint32_t)gic_redis_id) != 0)
     {
         return;
     }
 
     /* Set the interrupt mask. */
-    gic_reg_set_priority_mask(0xFF);
+    gic_set_priority_mask(0xFFU);
 
     /* Enable group 1 interrupts (group 0 are secure interrupts). */
-    gic_reg_enable_group1_interrupts();
+    gic_enable_group1_interrupts();
 }
 
 /**
@@ -71,7 +76,7 @@ void interrupt_enable_core_redis(void)
 void interrupt_init_gic(void)
 {
     /* Enable GIC. */
-    if (gic_enable_gic() != INTERRUPT_RETURN_SUCCESS)
+    if (gic_enable_gic() != 0)
     {
         return;
     }
@@ -80,52 +85,62 @@ void interrupt_init_gic(void)
     interrupt_enable_core_redis();
 }
 
-socfpga_interrupt_err_t interrupt_ppi_enable(socfpga_hpu_interrupt_t id,
+int interrupt_ppi_enable(socfpga_hpu_interrupt_t id,
         socfpga_hpu_interrupt_type_t interrupt_type,
-        uint8_t priority, uint32_t gic_redis_id) {
+        uint8_t priority, uint32_t gic_redis_id)
+{
     uint32_t type = GICV3_CONFIG_LEVEL;
     if ((id > PPI_MAX))
     {
-        return ERR_PPI_ID;
+        return -ERANGE;
     }
     if (interrupt_type == SPI_INTERRUPT_TYPE_EDGE)
     {
         type = GICV3_CONFIG_EDGE;
     }
 
-    if (gic_set_int_group((uint32_t)id, gic_redis_id,
-            GICV3_GROUP1_NON_SECURE) != INTERRUPT_RETURN_SUCCESS)
+    int err = gic_set_int_group((uint32_t)id, gic_redis_id,
+            GICV3_GROUP1_NON_SECURE);
+    if (err != 0)
     {
-        return ERR_PPI_ID;
+        return err;
     }
-    if (gic_set_int_type((uint32_t)id, gic_redis_id, type) != INTERRUPT_RETURN_SUCCESS)
+    err = gic_set_int_type((uint32_t)id, gic_redis_id, type);
+    if (err != 0)
     {
-        return ERR_PPI_ID;
+        return err;
     }
-    if (gic_set_int_priority((uint32_t)id, gic_redis_id, priority) != INTERRUPT_RETURN_SUCCESS)
+    err = gic_set_int_priority((uint32_t)id, gic_redis_id, priority);
+    if (err != 0)
     {
-        return ERR_PPI_ID;
+        return err;
     }
-    if (gic_enable_int((uint32_t)id, gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
+    err = gic_enable_int((uint32_t)id, gic_redis_id);
+    if (err != 0)
     {
-        return ERR_PPI_ID;
+        return err;
     }
-    return ERR_OK;
+    return 0;
 }
 
-socfpga_interrupt_err_t interrupt_spi_enable(socfpga_hpu_interrupt_t id,
+int interrupt_spi_enable(socfpga_hpu_interrupt_t id,
         socfpga_hpu_interrupt_type_t interrupt_type,
         socfpga_hpu_spi_interrupt_mode_t interrupt_mode,
         uint8_t priority)
 {
     uint32_t mode = GICV3_ROUTE_MODE_ANY;
     uint32_t type = GICV3_CONFIG_LEVEL;
-    uint32_t affinity = (uint32_t)gic_reg_get_cpu_affinity();
-    uint32_t  gic_redis_id = (uint32_t)gic_get_redist_id(affinity);
+    uint32_t affinity = (uint32_t)gic_get_cpu_affinity();
+    int gic_redis_id = gic_get_redis_id(affinity);
 
     if ((id > SOCFPGA_MAX_SPI) || (id < SOCFPGA_SPI_START))
     {
-        return ERR_SPI_ID;
+        return -ERANGE;
+    }
+
+    if (gic_redis_id < 0)
+    {
+        return gic_redis_id;
     }
 
     if (interrupt_type == SPI_INTERRUPT_TYPE_EDGE)
@@ -137,73 +152,84 @@ socfpga_interrupt_err_t interrupt_spi_enable(socfpga_hpu_interrupt_t id,
         mode = GICV3_ROUTE_MODE_COORDINATE;
     }
 
-    if (gic_set_int_priority((uint32_t)id, gic_redis_id, priority) != INTERRUPT_RETURN_SUCCESS)
+    int err = gic_set_int_priority((uint32_t)id, (uint32_t)gic_redis_id, priority);
+    if (err != 0)
     {
-        return ERR_SPI_ID;
+        return err;
     }
-    if (gic_set_int_group((uint32_t)id, gic_redis_id, GICV3_GROUP1_NON_SECURE) != INTERRUPT_RETURN_SUCCESS)
+    err = gic_set_int_group((uint32_t)id, (uint32_t)gic_redis_id, GICV3_GROUP1_NON_SECURE);
+    if (err != 0)
     {
-        return ERR_SPI_ID;
+        return err;
     }
-    if (gic_set_int_route((uint32_t)id, mode, affinity) != INTERRUPT_RETURN_SUCCESS)
+    err = gic_set_int_route((uint32_t)id, mode, affinity);
+    if (err != 0)
     {
-        return ERR_SPI_ID;
+        return err;
     }
-    if (gic_set_int_type((uint32_t)id, gic_redis_id, type) != INTERRUPT_RETURN_SUCCESS)
+    err = gic_set_int_type((uint32_t)id, (uint32_t)gic_redis_id, type);
+    if (err != 0)
     {
-        return ERR_SPI_ID;
+        return err;
     }
-    if (gic_enable_int((uint32_t)id, gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
+    err = gic_enable_int((uint32_t)id, (uint32_t)gic_redis_id);
+    if (err != 0)
     {
-        return ERR_SPI_ID;
+        return err;
     }
-    return ERR_OK;
+    return 0;
 }
-
-socfpga_interrupt_err_t interrupt_enable(socfpga_hpu_interrupt_t id, uint8_t priority) {
-
-    socfpga_interrupt_err_t error = ERR_OK;
-    uint32_t gic_redisributor_id;
+int interrupt_enable(socfpga_hpu_interrupt_t id, uint8_t priority)
+{
+    int err = 0;
+    int gic_redis_id;
     if (id < SOCFPGA_SPI_START)
     {
-        gic_redisributor_id = (uint32_t)gic_get_redist_id(
-                (uint32_t)gic_reg_get_cpu_affinity());
-        error = interrupt_ppi_enable(id, SPI_INTERRUPT_TYPE_LEVEL, priority, gic_redisributor_id);
+        gic_redis_id = gic_get_redis_id(
+                (uint32_t)gic_get_cpu_affinity());
+        if (gic_redis_id < 0)
+        {
+            return gic_redis_id;
+        }
+        err = interrupt_ppi_enable(id, SPI_INTERRUPT_TYPE_LEVEL, priority,
+                (uint32_t)gic_redis_id);
     }
     else
     {
-        error = interrupt_spi_enable(id, SPI_INTERRUPT_TYPE_LEVEL, SPI_INTERRUPT_MODE_TARGET,
+        err = interrupt_spi_enable(id, SPI_INTERRUPT_TYPE_LEVEL, SPI_INTERRUPT_MODE_TARGET,
                 priority);
     }
 
-    return error;
+    return err;
 }
 
-socfpga_interrupt_err_t interrupt_spi_disable(socfpga_hpu_interrupt_t id) {
-
-    uint32_t gic_redis_id = (uint32_t)gic_get_redist_id(
-                (uint32_t)gic_reg_get_cpu_affinity());
-    if (gic_disable_int((uint32_t)id, gic_redis_id) != INTERRUPT_RETURN_SUCCESS)
+int interrupt_disable(socfpga_hpu_interrupt_t id)
+{
+    int gic_redis_id = gic_get_redis_id(
+                (uint32_t)gic_get_cpu_affinity());
+    if (gic_redis_id < 0)
     {
-        return ERR_SPI_ID;
+        return gic_redis_id;
     }
-    return ERR_OK;
+
+    return gic_disable_int((uint32_t)id, (uint32_t)gic_redis_id);
 }
 
-socfpga_interrupt_err_t interrupt_register_isr(socfpga_hpu_interrupt_t id,
+int interrupt_register_isr(socfpga_hpu_interrupt_t id,
         socfpga_interrupt_callback_t callback,
-        void *user_data) {
+        void *user_data)
+{
     if (id > MAX_HPU_SPI_INTERRUPT)
     {
-        return ERR_SPI_ID;
+        return -ERANGE;
     }
     if (callback == 0)
     {
-        return ERR_INTERRUPT_CALLBACK;
+        return -EINVAL;
     }
     interrupt_callbacks[id].callback = callback;
     interrupt_callbacks[id].data = user_data;
-    return ERR_OK;
+    return 0;
 }
 
 /*

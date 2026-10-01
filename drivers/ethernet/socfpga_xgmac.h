@@ -1,7 +1,7 @@
 /*
  * SPDX-FileCopyrightText: Copyright (C) 2025-2026 Altera Corporation
  *
- * SPDX-License-Identifier: MIT
+ * SPDX-License-Identifier: MIT-0
  *
  * Header file for XGMAC HAL driver
  */
@@ -20,9 +20,14 @@ extern "C"
 {
 #endif
 
+#include <stdint.h>
 #include "osal.h"
 
 #include "socfpga_xgmac_reg.h"
+
+#ifndef BIT
+#define BIT(nr) (1UL << (nr))
+#endif
 
 /**
  * @defgroup enet Ethernet
@@ -83,7 +88,7 @@ extern "C"
 #define XGMAC_MAX_INSTANCE      (3)            /*!< Maximum number of XGMAC instances */
 #define XGMAC_PHY_TYPE_RGMII    1     /*!< PHY type - RGMII */
 
-/*!< Descriptor configuration */
+/* Descriptor configuration */
 #define XGMAC_NUM_RX_DESC        512     /*!< Number of RX descriptors */
 #define XGMAC_NUM_TX_DESC        512     /*!< Number of TX descriptors */
 #define XGMAC_PACKET_SIZE        1536U            /*!< Standard Ethernet packet size */
@@ -91,14 +96,11 @@ extern "C"
 #define XGMAC_MAX_PACKET_SIZE    (XGMAC_PACKET_SIZE + XGMAC_DMA_ALIGN_BYTES)            /*!< Max packet size including alignment */
 #define XGMAC_DMA_CH0            0U         /*!< DMA channel 0 */
 
-/*!< Receive Descriptor RDES3 Bitmasks */
+/* Receive Descriptor RDES3 Bitmasks */
 #define XGMAC_RDES3_OWN          BIT(31)            /*!< Ownership bit */
 #define XGMAC_RDES3_IOC          BIT(30)            /*!< Interrupt on Completion */
 #define XGMAC_RX_PACKET_ERROR    (RDES3_NORM_WR_LD_MASK | RDES3_NORM_WR_ES_MASK)       /*!< RX packet error flags */
 
-#define DELAY_MS(ms)    osal_task_delay((ms))  /*!< Macro to set delay */
-
-typedef int32_t xgmac_base_addr_t;/*!< XGMAC base address type */
 /**
  * @}
  */
@@ -192,8 +194,8 @@ typedef void (*xgmac_callback_t)(xgmac_int_status_t int_status, void *irq_data);
 struct xgmac_desc_t;
 
 /**
- * @brief xgmac_handle_t is the handle type returned by calling SocfpgaXGMAC_open().
- *        This is initialized in open and returned to caller. The caller must pass
+ * @brief xgmac_handle_t is the handle type returned by calling xgmac_emac_init().
+ *        This is initialized in init and returned to caller. The caller must pass
  *        this pointer to the rest of APIs.
  */
 typedef struct xgmac_desc_t *xgmac_handle_t;
@@ -207,6 +209,7 @@ typedef struct
     uint8_t phy_type;            /*!< PHY type */
     xgmac_handle_t hxgmac; /*!< Pointer to XGMAC handle */
 } xgmac_config_t;
+
 
 /**
  * @}
@@ -232,22 +235,7 @@ typedef struct
 xgmac_handle_t xgmac_emac_init(xgmac_config_t *cfg);
 
 /**
- * @brief Deinitialize the XGMAC.
- *
- * The application should call this function to deinitialize the desired XGMAC.
- *
- * @param[in] hxgmac The handle of XGMAC instance.
- *
- * @return
- * -  0:      if XGMAC successful deinitialized.
- * - -EINVAL: if the XGMAC handle passed is null or not initialized already.
- *
- */
-int32_t xgmac_emac_deinit(xgmac_handle_t hxgmac);
-
-
-/**
- * @brief start the XGMAC initialization.
+ * @brief Start the XGMAC initialization.
  *
  * The application should call this function to initialize the desired XGMAC and start the tx & rx.
  *
@@ -255,25 +243,16 @@ int32_t xgmac_emac_deinit(xgmac_handle_t hxgmac);
  *
  * @return
  * - 0: on XGMAC successful configuration and start operation.
+ * - -EINVAL: if the XGMAC handle passed is null or not initialized.
  *
  */
 int32_t xgmac_emac_start(xgmac_handle_t hxgmac);
 
 /**
- * @brief stop the XGMAC.
+ * @brief Set the callback function to be called on completion of an operation.
  *
- * The application should call this function to stop the XGMAC.
- *
- * @param[in] hxgmac The instance of the XGMAC to stop.
- *
- */
-void xgmac_emac_stop(xgmac_handle_t hxgmac);
-
-/**
- * @brief set the callback function to be called on completion of an operation.
- *
- * The application should call this function to set the callback is guaranteed to be invoked
- * when an interrupt occurs.
+ * The application should call this function to set the callback that is guaranteed
+ * to be invoked when an interrupt occurs.
  *
  * @param[in] hxgmac The instance of the XGMAC to set the callback for.
  * @param[in] callback The callback function to be called
@@ -282,7 +261,7 @@ void xgmac_emac_stop(xgmac_handle_t hxgmac);
  * passed to the callback function
  *
  * @return
- * -  0:      on XGMAC successfully stop operation.
+ * -  0:      on XGMAC successfully setting the callback.
  * - -EINVAL: if hxgmac is NULL
  * - -EBUSY:  if XGMAC has already been started.
  *
@@ -299,7 +278,7 @@ int32_t xgmac_set_callback(xgmac_handle_t hxgmac, xgmac_callback_t callback, voi
  * - Base address of the XGMAC instance.
  */
 
-int32_t xgmac_get_inst_base_addr(xgmac_handle_t hxgmac);
+uint32_t xgmac_get_inst_base_addr(xgmac_handle_t hxgmac);
 /**
  * @brief Get the error information of the XGMAC instance.
  *
@@ -326,25 +305,11 @@ xgmac_err_info_t *xgmac_get_err_info(xgmac_handle_t hxgmac);
 int32_t xgmac_dma_initialize(xgmac_handle_t hxgmac);
 
 /**
- * @brief Deinitialize the XGMAC DMA.
- *
- * The application should call this function to deinitialize the desired XGMAC DMA.
- *
- * @param[in] hxgmac The instance of the XGMAC to deinitialize the DMA.
- *
- * @return
- * -  0:   on XGMAC DMA successful deinitialization.
- * - -EIO: if DMA failed to deinitialize.
- *
- */
-int32_t xgmac_dma_deinitialize(xgmac_handle_t hxgmac);
-
-/**
  * @brief Initiate the transmit out of buffer via DMA.
  *
  * The application should call this once the data is ready to be transmitted.
  *
- * @param[in] hxgmac     The instance of the XGMAC to stop.
+ * @param[in] hxgmac     The instance of the XGMAC to transmit on.
  * @param[in] dma_tx_buf The structure to buffer descriptor. It contains the
  *                               pointer to the buffer, size of buffer and the flag
  *                               to notify the dma driver regarding releasing the buffer
@@ -353,6 +318,7 @@ int32_t xgmac_dma_deinitialize(xgmac_handle_t hxgmac);
  * @return
  * - 0:    if DMA successfully transmit the buffer.
  * - -EIO: if DMA failed to transmit the buffer
+ * - -EINVAL: if the descriptor is invalid
  *
  */
 int32_t xgmac_dma_transmit(xgmac_handle_t hxgmac, xgmac_tx_buf_t *dma_tx_buf);
@@ -362,13 +328,14 @@ int32_t xgmac_dma_transmit(xgmac_handle_t hxgmac, xgmac_tx_buf_t *dma_tx_buf);
  *
  * The application should call this once it gets an event notification after a dma transmit.
  *
- * @param[in]  hxgmac     The instance of the XGMAC to stop.
+ * @param[in]  hxgmac     The instance of the XGMAC to check the transmit status for.
  * @param[out] release_buffer The released buffer which will be used for next transmit.
  *
  * @return
  * -  0:      if successfully obtained the status of buffer transmission.
  * - -EIO:    if failed to obtain the status of buffer transmission.
  * - -EAGAIN: if application failed to obtain the status of dma descriptor.
+ * - -EINVAL: if a descriptor is invalid
  *
  */
 int32_t xgmac_dma_tx_done(xgmac_handle_t hxgmac, uint8_t **release_buffer);
@@ -378,7 +345,7 @@ int32_t xgmac_dma_tx_done(xgmac_handle_t hxgmac, uint8_t **release_buffer);
  *
  * The application should call this once the data is ready to be received in the dma fifo.
  *
- * @param[in]  hxgmac    The instance of the XGMAC to stop.
+ * @param[in]  hxgmac    The instance of the XGMAC to receive on.
  * @param[out] dma_rx_buf The structure to buffer descriptor. It contains the
  *                              pointer to the buffer, size of buffer and the packet
  *                              status which will be validated by the stack to
@@ -387,6 +354,7 @@ int32_t xgmac_dma_tx_done(xgmac_handle_t hxgmac, uint8_t **release_buffer);
  * @return
  * - 0:       if DMA successfully receive the buffer.
  * - -EAGAIN: if DMA failed to receive the buffer
+ * - -EINVAL: if a descriptor or buffer is invalid
  *
  */
 int32_t xgmac_dma_receive(xgmac_handle_t hxgmac, xgmac_rx_buf_t *dma_rx_buf);
@@ -402,15 +370,22 @@ int32_t xgmac_dma_receive(xgmac_handle_t hxgmac, xgmac_rx_buf_t *dma_rx_buf);
  *
  * @return
  * - 0: if the descriptor was successfully refilled.
+ * - -EINVAL: if the descriptor is invalid
  */
-int32_t xgmac_refill_rx_descriptor(xgmac_handle_t hxgmac, uint8_t *buf);
+int32_t xgmac_refill_rx_desc(xgmac_handle_t hxgmac, uint8_t *buf);
 
 /**
- * @brief Flush the DMA buffers.
+ * @brief Configure XGMAC link speed and duplex.
  *
- * @param[in] hxgmac The instance of the XGMAC to flush the buffers.
+ * @param[in] hxgmac      The instance of the XGMAC to configure.
+ * @param[in] speed_mbps  Link speed in Mbps.
+ * @param[in] duplex      Duplex mode (full or half).
+ *
+ * @return
+ * - 0: if the configuration was applied.
+ * - -EINVAL: if the configuration is invalid.
  */
-void xgmac_dma_flush_buffers(xgmac_handle_t hxgmac);
+int32_t xgmac_set_link_cfg(xgmac_handle_t hxgmac, uint32_t speed_mbps, uint8_t duplex);
 
 #ifdef __cplusplus
 }

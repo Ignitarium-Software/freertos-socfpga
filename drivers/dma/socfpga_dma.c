@@ -91,7 +91,7 @@ dma_handle_t dma_open(uint32_t instance, uint32_t ch)
     int32_t status;
     uint8_t reset_status;
     dma_handle_t phandle = NULL;
-    socfpga_interrupt_err_t int_ret;
+    int err;
     if ((instance >= DMA_NUM_INSTANCE) || (ch >= DMA_NUM_CHANNELS))
     {
         ERROR("Not a valid DMAC Instance or Channel");
@@ -131,13 +131,13 @@ dma_handle_t dma_open(uint32_t instance, uint32_t ch)
     phandle->ch = ch;
     phandle->linked_list_base = &plinked_list_chain[instance][(ch * MAX_LLI_PER_CHANNEL)];
     /* Setup and enable interrupts in GIC */
-    int_ret = interrupt_register_isr(phandle->int_id, pdma_irq_handler, phandle);
-    if (int_ret != ERR_OK)
+    err = interrupt_register_isr(phandle->int_id, pdma_irq_handler, phandle);
+    if (err != 0)
     {
         return NULL;
     }
-    int_ret = interrupt_enable(phandle->int_id, GIC_INTERRUPT_PRIORITY_DMA);
-    if (int_ret != ERR_OK)
+    err = interrupt_enable(phandle->int_id, GIC_INTERRUPT_PRIORITY_DMA);
+    if (err != 0)
     {
         return NULL;
     }

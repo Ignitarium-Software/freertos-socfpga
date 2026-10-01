@@ -1467,7 +1467,7 @@ i3c_handle_t i3c_open(uint8_t instance)
     if (i3c_isr_registered[instance] == false)
     {
         if (interrupt_register_isr(int_id, i3c_isr,
-                &i3c_desc[instance]) != ERR_OK)
+                &i3c_desc[instance]) != 0)
         {
             (void)i3c_ll_deinit(instance, i3c_desc[instance].base_addr);
             i3c_delete_osal_primitives(&i3c_desc[instance]);
@@ -1475,9 +1475,9 @@ i3c_handle_t i3c_open(uint8_t instance)
         }
         i3c_isr_registered[instance] = true;
     }
-    if (interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_I3C) != ERR_OK)
+    if (interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_I3C) != 0)
     {
-        (void)interrupt_spi_disable(int_id);
+        (void)interrupt_disable(int_id);
         (void)i3c_ll_deinit(instance, i3c_desc[instance].base_addr);
         i3c_delete_osal_primitives(&i3c_desc[instance]);
         return NULL;
@@ -1497,7 +1497,7 @@ int32_t i3c_close(i3c_handle_t hi3c)
         return -EINVAL;
     }
 
-    (void)interrupt_spi_disable(GET_I3C_INTERRUPT_ID(instance));
+    (void)interrupt_disable(GET_I3C_INTERRUPT_ID(instance));
     i3c_ll_disable_interrupt(hi3c->base_addr, I3C_ALL_STS_INTR);
     i3c_ll_clear_intr_status(hi3c->base_addr, I3C_ALL_STS_INTR);
     i3c_ll_reset_queues(hi3c->base_addr);

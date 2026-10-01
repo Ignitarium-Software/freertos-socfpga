@@ -458,7 +458,7 @@ static void i2c_slave_handle_read_request(i2c_handle_t pi2c_peripheral)
 i2c_handle_t i2c_open(uint32_t instance)
 {
     i2c_handle_t handle;
-    socfpga_interrupt_err_t int_ret;
+    int err;
     socfpga_hpu_interrupt_t int_id;
     reset_periphrl_t rst_instance;
     uint8_t reset_status = 0U;
@@ -527,15 +527,15 @@ i2c_handle_t i2c_open(uint32_t instance)
             i2c_delete_osal_primitives(handle);
             return NULL;
         }
-        int_ret = interrupt_register_isr(int_id, i2c_isr, handle);
-        if (int_ret != ERR_OK)
+        err = interrupt_register_isr(int_id, i2c_isr, handle);
+        if (err != 0)
         {
             ERROR("Failed to register I2C interrupt handler. ");
             i2c_delete_osal_primitives(handle);
             return NULL;
         }
-        int_ret = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_I2C);
-        if (int_ret != ERR_OK)
+        err = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_I2C);
+        if (err != 0)
         {
             ERROR("Failed to enable I2C interrupt");
             i2c_delete_osal_primitives(handle);

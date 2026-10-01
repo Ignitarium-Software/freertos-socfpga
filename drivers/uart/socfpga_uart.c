@@ -64,7 +64,7 @@ uart_handle_t uart_open(uint32_t instance)
 {
     uart_handle_t handle;
     socfpga_hpu_interrupt_t int_id;
-    socfpga_interrupt_err_t int_ret;
+    int err;
 
     if (instance >= UART_MAX_INSTANCE)
     {
@@ -84,14 +84,14 @@ uart_handle_t uart_open(uint32_t instance)
     handle->base_address = GET_UART_BASE_ADDRESS(instance);
 
     int_id = GET_INT_ID(instance);
-    int_ret = interrupt_register_isr(int_id, uart_isr, handle);
-    if (int_ret != ERR_OK)
+    err = interrupt_register_isr(int_id, uart_isr, handle);
+    if (err != 0)
     {
         return NULL;
     }
 
-    int_ret = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_UART);
-    if (int_ret != ERR_OK)
+    err = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_UART);
+    if (err != 0)
     {
         return NULL;
     }

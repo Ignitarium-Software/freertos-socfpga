@@ -83,17 +83,18 @@ typedef struct
 
 struct fcs_service_descriptor
 {
+    int is_init;
     osal_semaphore_t fcs_sem;
     fcs_session_handle_t session_map[FCS_MAX_INSTANCES];
     sdm_client_handle_t security_handle;
     int session_count;
 };
 
-static struct fcs_service_descriptor *fcs_descriptor = NULL;
+static struct fcs_service_descriptor fcs_desc;
 /** @cond DOXYGEN_IGNORE */
 /* Statically allocating 4MB of data, 64 byte alignment for cache operations */
-static uint32_t fcs_inp_ops_buffer[FCS_BUFFER_SIZE] __attribute__((aligned(64)));
-static uint32_t fcs_out_ops_buffer[FCS_BUFFER_SIZE] __attribute__((aligned(64)));
+static uint32_t fcs_in_ops_buf[FCS_BUFFER_SIZE] __attribute__((aligned(64)));
+static uint32_t fcs_out_ops_buf[FCS_BUFFER_SIZE] __attribute__((aligned(64)));
 /** @endcond */
 
 void fcs_callback(uint64_t *resp_values);
@@ -101,50 +102,40 @@ void fcs_callback(uint64_t *resp_values);
 int fcs_init(void)
 {
     int ret;
-    if (fcs_descriptor == NULL)
+    if (!fcs_desc.is_init)
     {
-        fcs_descriptor = pvPortMalloc(sizeof(struct fcs_service_descriptor));
-        if (fcs_descriptor == NULL)
-        {
-            ERROR("Failed to initialise FCS");
-            return -ENOMEM;
-        }
-        fcs_descriptor->session_count = 0;
-        (void)memset(fcs_descriptor->session_map, 0,
-                sizeof(fcs_descriptor->session_map));
+        (void)memset(&fcs_desc, 0, sizeof(fcs_desc));
+        fcs_desc.session_count = 0;
+        (void)memset(fcs_desc.session_map, 0,
+                sizeof(fcs_desc.session_map));
         ret = mbox_init();
         if (ret != 0)
         {
             ERROR("Aborting FCS initialization");
-            (void)memset(fcs_descriptor, 0, sizeof(struct
-                    fcs_service_descriptor));
-            vPortFree(fcs_descriptor);
-            fcs_descriptor = NULL;
+            (void)memset(&fcs_desc, 0, sizeof(fcs_desc));
+            fcs_desc.is_init = 0;
             return -EIO;
         }
 
         /* Opening a client to perform non session related operations */
-        fcs_descriptor->security_handle = mbox_open_client();
-        if (fcs_descriptor->security_handle == NULL)
+        fcs_desc.security_handle = mbox_open_client();
+        if (fcs_desc.security_handle == NULL)
         {
             ERROR("Failed to open mailbox client");
-            (void)memset(fcs_descriptor, 0, sizeof(struct
-                    fcs_service_descriptor));
-            vPortFree(fcs_descriptor);
-            fcs_descriptor = NULL;
+            (void)memset(&fcs_desc, 0, sizeof(fcs_desc));
+            fcs_desc.is_init = 0;
             return -EIO;
         }
-        ret = mbox_set_callback(fcs_descriptor->security_handle, fcs_callback);
-        fcs_descriptor->fcs_sem = osal_semaphore_create(NULL);
-        if ((fcs_descriptor->fcs_sem == NULL) || (ret != 0))
+        ret = mbox_set_callback(fcs_desc.security_handle, fcs_callback);
+        fcs_desc.fcs_sem = osal_semaphore_create(NULL);
+        if ((fcs_desc.fcs_sem == NULL) || (ret != 0))
         {
             ERROR("Failed to initialise semaphore");
-            (void)memset(fcs_descriptor, 0, sizeof(struct
-                    fcs_service_descriptor));
-            vPortFree(fcs_descriptor);
-            fcs_descriptor = NULL;
+            (void)memset(&fcs_desc, 0, sizeof(fcs_desc));
+            fcs_desc.is_init = 0;
             return -EIO;
         }
+        fcs_desc.is_init = 1;
     }
     else
     {
@@ -155,19 +146,19 @@ int fcs_init(void)
 int fcs_deinit(void)
 {
     int ret;
-    if (fcs_descriptor == NULL)
+    if (!fcs_desc.is_init)
     {
         ERROR("FCS not initialised");
         return -EIO;
     }
     else
     {
-        if (fcs_descriptor->session_count != 0)
+        if (fcs_desc.session_count != 0)
         {
             WARN("%d pending sessions to be closed",
-                    fcs_descriptor->session_count);
+                    fcs_desc.session_count);
         }
-        ret = mbox_close_client(fcs_descriptor->security_handle);
+        ret = mbox_close_client(fcs_desc.security_handle);
         if (ret != 0)
         {
             ERROR("Failed to close malibox client");
@@ -179,9 +170,8 @@ int fcs_deinit(void)
             WARN("Failed to free mailbox resources");
         }
 
-        (void)memset(fcs_descriptor, 0, sizeof(struct fcs_service_descriptor));
-        vPortFree(fcs_descriptor);
-        fcs_descriptor = NULL;
+        (void)memset(&fcs_desc, 0, sizeof(fcs_desc));
+        fcs_desc.is_init = 0;
     }
     return 0;
 }
@@ -191,7 +181,7 @@ static sdm_client_handle_t get_client_handle(char *uuid, uint32_t *session_id)
     int i;
     sdm_client_handle_t fcs_handle = NULL;
 
-    if (fcs_descriptor->session_count == 0)
+    if (fcs_desc.session_count == 0)
     {
         ERROR("No opened sessions");
     }
@@ -199,11 +189,11 @@ static sdm_client_handle_t get_client_handle(char *uuid, uint32_t *session_id)
     {
         for (i = 0; i < (int)FCS_MAX_INSTANCES; i++)
         {
-            if (memcmp(fcs_descriptor->session_map[i].uuid, uuid,
+            if (memcmp(fcs_desc.session_map[i].uuid, uuid,
                     FCS_UUID_SIZE) == 0)
             {
-                fcs_handle = fcs_descriptor->session_map[i].crypto_handle;
-                *session_id = fcs_descriptor->session_map[i].session_id;
+                fcs_handle = fcs_desc.session_map[i].crypto_handle;
+                *session_id = fcs_desc.session_map[i].session_id;
             }
         }
     }
@@ -221,30 +211,30 @@ static void generate_uuid(sdm_client_handle_t fcs_handle, uint32_t session_id,
     int ret;
     rng_args[0] = session_id;
     rng_args[1] = 1;
-    rng_args[2] = (uint64_t)fcs_out_ops_buffer;
+    rng_args[2] = (uint64_t)fcs_out_ops_buf;
     rng_args[3] = FCS_UUID_SIZE;
-    cache_force_invalidate(fcs_out_ops_buffer, FCS_UUID_SIZE +
+    cache_force_invalidate(fcs_out_ops_buf, FCS_UUID_SIZE +
             FCS_RESP_HEADER_SIZE);
 
     ret = sip_svc_send(fcs_handle, FCS_RANDOM_NUMBER, rng_args,
             sizeof(rng_args), rng_resp, sizeof(rng_resp));
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             if (rng_resp[FCS_RESP_STATUS] == 0UL)
             {
-                cache_force_invalidate(fcs_out_ops_buffer, FCS_UUID_SIZE +
+                cache_force_invalidate(fcs_out_ops_buf, FCS_UUID_SIZE +
                         FCS_RESP_HEADER_SIZE);
                 (void)memcpy((void *)uuid,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA],
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA],
                         FCS_UUID_SIZE);
             }
         }
     }
 }
-int run_fcs_open_service_session(char *uuid)
+int fcs_open_session(char *uuid)
 {
     int ret, i;
     uint16_t status;
@@ -255,7 +245,7 @@ int run_fcs_open_service_session(char *uuid)
     uint32_t session_id;
     sdm_client_handle_t fcs_handle;
 
-    if (fcs_descriptor->session_count >= (int)FCS_MAX_INSTANCES)
+    if (fcs_desc.session_count >= (int)FCS_MAX_INSTANCES)
     {
         ERROR("Session Limit Reaced");
         return -EIO;
@@ -268,18 +258,18 @@ int run_fcs_open_service_session(char *uuid)
     /* Session ID is tied with a client, find a client with no session*/
     for (i = 0; i < (int)FCS_MAX_INSTANCES; i++)
     {
-        if (fcs_descriptor->session_map[i].session_id == 0U)
+        if (fcs_desc.session_map[i].session_id == 0U)
         {
             break;
         }
     }
-    fcs_descriptor->session_map[i].crypto_handle = mbox_open_client();
-    if (fcs_descriptor->session_map[i].crypto_handle == NULL)
+    fcs_desc.session_map[i].crypto_handle = mbox_open_client();
+    if (fcs_desc.session_map[i].crypto_handle == NULL)
     {
         ERROR("Failed to open Mailbox Client");
         return -EIO;
     }
-    fcs_handle = fcs_descriptor->session_map[fcs_descriptor->session_count].
+    fcs_handle = fcs_desc.session_map[fcs_desc.session_count].
             crypto_handle;
     if (fcs_handle == NULL)
     {
@@ -297,7 +287,7 @@ int run_fcs_open_service_session(char *uuid)
             sizeof(open_session_resp));
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", open_session_resp[0],
@@ -305,7 +295,7 @@ int run_fcs_open_service_session(char *uuid)
             if (open_session_resp[FCS_RESP_STATUS] == 0UL)
             {
                 session_id = (uint32_t)open_session_resp[FCS_RESP_SIZE];
-                fcs_descriptor->session_map[i].session_id = session_id;
+                fcs_desc.session_map[i].session_id = session_id;
                 INFO("Generating UUID");
                 generate_uuid(fcs_handle, session_id, uuid);
                 if (uuid == NULL)
@@ -316,9 +306,9 @@ int run_fcs_open_service_session(char *uuid)
                 /* UUID v4 formatting */
                 uuid[6] = (char)(((uint8_t)uuid[6] & 0x0FU) | 0x40U);
                 uuid[8] = (char)(((uint8_t)uuid[8] & 0x3FU) | 0x80U);
-                (void)memcpy(fcs_descriptor->session_map[i].uuid, uuid,
+                (void)memcpy(fcs_desc.session_map[i].uuid, uuid,
                         FCS_UUID_SIZE);
-                fcs_descriptor->session_count++;
+                fcs_desc.session_count++;
             }
             status = (uint16_t)(open_session_resp[FCS_RESP_STATUS] &
                     FCS_STATUS_MASK);
@@ -331,7 +321,7 @@ int run_fcs_open_service_session(char *uuid)
     }
     return ret;
 }
-int run_fcs_close_service_session(char *uuid)
+int fcs_close_session(char *uuid)
 {
     int ret, i;
     uint16_t status;
@@ -352,7 +342,7 @@ int run_fcs_close_service_session(char *uuid)
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1: %lx", resp_err);
@@ -370,12 +360,12 @@ int run_fcs_close_service_session(char *uuid)
                 }
                 for (i = 0; i < (int)FCS_MAX_INSTANCES; i++)
                 {
-                    if (fcs_descriptor->session_map[i].session_id == session_id)
+                    if (fcs_desc.session_map[i].session_id == session_id)
                     {
                         /* Indicate that the client has no associated sesssion */
-                        (void)memset(&fcs_descriptor->session_map[i], 0x0,
-                                sizeof(fcs_descriptor->session_map[i]));
-                        fcs_descriptor->session_count--;
+                        (void)memset(&fcs_desc.session_map[i], 0x0,
+                                sizeof(fcs_desc.session_map[i]));
+                        fcs_desc.session_count--;
                     }
                 }
             }
@@ -386,7 +376,7 @@ int run_fcs_close_service_session(char *uuid)
     return ret;
 }
 
-int run_fcs_random_number_ext(char *rand_buf, char *uuid,
+int fcs_random_number(char *rand_buf, char *uuid,
         uint32_t context_id, uint32_t rand_size)
 {
     sdm_client_handle_t fcs_handle;
@@ -416,9 +406,9 @@ int run_fcs_random_number_ext(char *rand_buf, char *uuid,
     }
     rng_args[0] = session_id;
     rng_args[1] = context_id;
-    rng_args[2] = (uint64_t)fcs_out_ops_buffer;
+    rng_args[2] = (uint64_t)fcs_out_ops_buf;
     rng_args[3] = (uint64_t)rand_size + (uint64_t)extra_data;
-    cache_force_invalidate(fcs_out_ops_buffer, rand_size +
+    cache_force_invalidate(fcs_out_ops_buf, rand_size +
             FCS_RESP_HEADER_SIZE);
 
     DEBUG("Random_number_ext: rand_size: %u", rand_size + extra_data);
@@ -426,27 +416,27 @@ int run_fcs_random_number_ext(char *rand_buf, char *uuid,
             sizeof(rng_args), rng_resp, sizeof(rng_resp));
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", rng_resp[0],
                     rng_resp[1]);
             if (rng_resp[FCS_RESP_STATUS] == 0UL)
             {
-                cache_force_invalidate(fcs_out_ops_buffer, rand_size +
+                cache_force_invalidate(fcs_out_ops_buf, rand_size +
                         FCS_RESP_HEADER_SIZE);
                 status = (uint16_t)rng_resp[FCS_RESP_STATUS];
                 ret = (int)status;
                 /* We dont copy the extra data */
                 (void)memcpy((void *)rand_buf,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA], rand_size);
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA], rand_size);
             }
         }
     }
     return ret;
 }
 
-int run_fcs_import_service_key(char *uuid, char *key,
+int fcs_import_key(char *uuid, char *key,
         uint32_t key_size, char *status, unsigned int *status_size)
 {
     sdm_client_handle_t fcs_handle;
@@ -470,26 +460,26 @@ int run_fcs_import_service_key(char *uuid, char *key,
     {
         return -EINVAL;
     }
-    (void)memset(fcs_inp_ops_buffer, 0, ((size_t)key_size +
+    (void)memset(fcs_in_ops_buf, 0, ((size_t)key_size +
             FCS_KEY_HEADER_SIZE));
 
-    fcs_inp_ops_buffer[0] = session_id;
+    fcs_in_ops_buf[0] = session_id;
     /* The mailbox requires 8 bytes reserved after session id */
-    (void)memcpy((void *)&fcs_inp_ops_buffer[3], (void *)key, key_size);
+    (void)memcpy((void *)&fcs_in_ops_buf[3], (void *)key, key_size);
 
-    import_key_args[0] = (uint64_t)fcs_inp_ops_buffer;
+    import_key_args[0] = (uint64_t)fcs_in_ops_buf;
     import_key_args[1] = (uint64_t)key_size + FCS_KEY_HEADER_SIZE;
-    cache_force_write_back((void *)fcs_inp_ops_buffer, ((size_t)key_size +
+    cache_force_write_back((void *)fcs_in_ops_buf, ((size_t)key_size +
             FCS_KEY_HEADER_SIZE));
 
-    DEBUG("Import_service_key: key_buffer: %lx, key_size: %u", (uint64_t)key,
+    DEBUG("Import_key: key_buf: %lx, key_size: %u", (uint64_t)key,
             key_size);
     ret = sip_svc_send(fcs_handle, FCS_IMPORT_SERVICE_KEY, import_key_args,
             sizeof(import_key_args), import_key_resp, sizeof(import_key_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", import_key_resp[0],
@@ -505,8 +495,8 @@ int run_fcs_import_service_key(char *uuid, char *key,
     return ret;
 }
 
-int run_fcs_export_service_key(char *uuid, uint32_t key_id,
-        char *key_dest, unsigned int *key_size)
+int fcs_export_key(char *uuid, uint32_t key_id,
+        char *key_dst, unsigned int *key_size)
 {
     sdm_client_handle_t fcs_handle;
     uint32_t session_id = 0U;
@@ -522,37 +512,37 @@ int run_fcs_export_service_key(char *uuid, uint32_t key_id,
         ERROR("Failed to locate client");
         return -EIO;
     }
-    if ((key_dest == NULL) || (key_size == NULL))
+    if ((key_dst == NULL) || (key_size == NULL))
     {
         ERROR("No buffer provided");
         return -EINVAL;
     }
     export_key_args[0] = session_id;
     export_key_args[1] = key_id;
-    export_key_args[2] = (uint64_t)fcs_out_ops_buffer;
+    export_key_args[2] = (uint64_t)fcs_out_ops_buf;
     export_key_args[3] = *key_size;
-    cache_force_invalidate(fcs_out_ops_buffer, FCS_EXPORT_KEY_MAX_SIZE);
+    cache_force_invalidate(fcs_out_ops_buf, FCS_EXPORT_KEY_MAX_SIZE);
 
-    DEBUG("Export_service_key: key_id: %u", key_id);
+    DEBUG("Export_key: key_id: %u", key_id);
     ret = sip_svc_send(fcs_handle, FCS_EXPORT_SERVICE_KEY, export_key_args,
             sizeof(export_key_args), export_key_resp, sizeof(export_key_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", export_key_resp[0],
                     export_key_resp[1]);
             if (export_key_resp[FCS_RESP_STATUS] == 0UL)
             {
-                cache_force_invalidate((void *)fcs_out_ops_buffer,
+                cache_force_invalidate((void *)fcs_out_ops_buf,
                         (size_t)export_key_resp[FCS_RESP_SIZE]);
                 /* Ignoring the key status word of size 4 at the
                  * beginning of the response */
                 *key_size = (uint32_t)export_key_resp[FCS_RESP_SIZE] -
                         MBOX_WORD_SIZE;
-                (void)memcpy((void *)key_dest, (void *)&fcs_out_ops_buffer[1],
+                (void)memcpy((void *)key_dst, (void *)&fcs_out_ops_buf[1],
                         *key_size);
             }
             status = (uint16_t)export_key_resp[FCS_RESP_STATUS];
@@ -561,7 +551,7 @@ int run_fcs_export_service_key(char *uuid, uint32_t key_id,
     }
     return ret;
 }
-int run_fcs_remove_service_key(char *uuid, uint32_t key_id)
+int fcs_remove_key(char *uuid, uint32_t key_id)
 {
     sdm_client_handle_t fcs_handle;
     uint64_t remove_key_args[2], remove_key_resp[2] =
@@ -581,13 +571,13 @@ int run_fcs_remove_service_key(char *uuid, uint32_t key_id)
     remove_key_args[0] = session_id;
     remove_key_args[1] = key_id;
 
-    DEBUG("Remove_service_key: key_id: %u", key_id);
+    DEBUG("Remove_key: key_id: %u", key_id);
     ret = sip_svc_send(fcs_handle, FCS_REMOVE_SERVICE_KEY, remove_key_args,
             sizeof(remove_key_args), remove_key_resp, sizeof(remove_key_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", remove_key_resp[0],
@@ -599,7 +589,7 @@ int run_fcs_remove_service_key(char *uuid, uint32_t key_id)
 
     return ret;
 }
-int run_fcs_get_service_key_info(char *uuid, uint32_t key_id,
+int fcs_get_key_info(char *uuid, uint32_t key_id,
         char *key_info, unsigned int *key_info_size)
 {
     sdm_client_handle_t fcs_handle;
@@ -628,14 +618,14 @@ int run_fcs_get_service_key_info(char *uuid, uint32_t key_id,
     get_key_info_args[3] = *key_info_size;
     cache_force_write_back(key_info, FCS_KEY_INFO_MAX_RESP);
 
-    DEBUG("Get_service_key_info: key_id: %u", key_id);
+    DEBUG("Get_key_info: key_id: %u", key_id);
     ret = sip_svc_send(fcs_handle, FCS_GET_SERVICE_KEY_INFO, get_key_info_args,
             sizeof(get_key_info_args), get_key_info_resp,
             sizeof(get_key_info_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", get_key_info_resp[0],
@@ -652,7 +642,7 @@ int run_fcs_get_service_key_info(char *uuid, uint32_t key_id,
     }
     return ret;
 }
-int run_fcs_create_service_key(char *uuid, char *key,
+int fcs_create_key(char *uuid, char *key,
         uint32_t key_size, char *status, unsigned int *status_size)
 {
     sdm_client_handle_t fcs_handle;
@@ -679,25 +669,25 @@ int run_fcs_create_service_key(char *uuid, char *key,
         ERROR("Key size exceeds maximum limit");
         return -EINVAL;
     }
-    (void)memset(fcs_inp_ops_buffer, 0, ((size_t)key_size +
+    (void)memset(fcs_in_ops_buf, 0, ((size_t)key_size +
             FCS_KEY_HEADER_SIZE));
-    fcs_inp_ops_buffer[0] = session_id;
+    fcs_in_ops_buf[0] = session_id;
     /* The mailbox requires 8 bytes reserved after session id */
-    (void)memcpy((void *)&fcs_inp_ops_buffer[3], (void *)key, key_size);
+    (void)memcpy((void *)&fcs_in_ops_buf[3], (void *)key, key_size);
 
-    create_key_args[0] = (uint64_t)fcs_inp_ops_buffer;
+    create_key_args[0] = (uint64_t)fcs_in_ops_buf;
     create_key_args[1] = ((uint64_t)key_size + FCS_KEY_HEADER_SIZE);
-    cache_force_write_back((void *)fcs_inp_ops_buffer, ((size_t)key_size +
+    cache_force_write_back((void *)fcs_in_ops_buf, ((size_t)key_size +
             FCS_KEY_HEADER_SIZE));
 
-    DEBUG("Create_service_key: key_buffer: %lx, key_size: %u", (uint64_t)key,
+    DEBUG("Create_key: key_buf: %lx, key_size: %u", (uint64_t)key,
             key_size);
     ret = sip_svc_send(fcs_handle, FCS_CREATE_SERVICE_KEY, create_key_args,
             sizeof(create_key_args), create_key_resp, sizeof(create_key_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", create_key_resp[0],
@@ -714,7 +704,7 @@ int run_fcs_create_service_key(char *uuid, char *key,
     return ret;
 }
 
-int run_fcs_service_get_provision_data(char *prov_data,
+int fcs_get_provision_data(char *prov_data,
         uint32_t *prov_data_size)
 {
     int ret;
@@ -723,7 +713,7 @@ int run_fcs_service_get_provision_data(char *prov_data,
     {
         0
     };
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
@@ -736,15 +726,15 @@ int run_fcs_service_get_provision_data(char *prov_data,
     cache_force_invalidate(prov_data, FCS_PROV_DATA_MAX_SIZE);
 
     prov_data_arg = (uint64_t)prov_data;
-    DEBUG("Get_provision_data: prov_data_buffer: %lx",
+    DEBUG("Get_provision_data: prov_data_buf: %lx",
             (uint64_t)(uintptr_t)prov_data);
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_GET_PROVISION_DATA,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_GET_PROVISION_DATA,
             &prov_data_arg, sizeof(prov_data_arg), prov_data_resp,
             sizeof(prov_data_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", prov_data_resp[0],
@@ -760,7 +750,7 @@ int run_fcs_service_get_provision_data(char *prov_data,
     }
     return ret;
 }
-int run_fcs_send_certificate(char *cert_data, uint32_t cert_size,
+int fcs_send_certificate(char *cert_data, uint32_t cert_size,
         uint32_t *status)
 {
     uint64_t send_cert_args[3], send_cert_resp[2] =
@@ -772,27 +762,27 @@ int run_fcs_send_certificate(char *cert_data, uint32_t cert_size,
 
     /* First 4 bytes are for test word(reserved in our case as its provided
      * in the certificate) */
-    (void)memset(fcs_inp_ops_buffer, 0, cert_size + sizeof(uint32_t));
-    (void)memcpy((void *)&fcs_inp_ops_buffer[1], (void *)cert_data, cert_size);
-    if (fcs_descriptor->security_handle == NULL)
+    (void)memset(fcs_in_ops_buf, 0, cert_size + sizeof(uint32_t));
+    (void)memcpy((void *)&fcs_in_ops_buf[1], (void *)cert_data, cert_size);
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
     }
 
-    send_cert_args[0] = (uint64_t)fcs_inp_ops_buffer;
+    send_cert_args[0] = (uint64_t)fcs_in_ops_buf;
     send_cert_args[1] = (uint64_t)cert_size + sizeof(uint32_t);
-    cache_force_write_back(fcs_inp_ops_buffer, cert_size + sizeof(uint32_t));
+    cache_force_write_back(fcs_in_ops_buf, cert_size + sizeof(uint32_t));
 
-    DEBUG("Send_certificate: cert_buffer: %lx, cert_size: %u",
+    DEBUG("Send_certificate: cert_buf: %lx, cert_size: %u",
             (uint64_t)cert_data, cert_size);
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_SEND_CERTIFICATE,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_SEND_CERTIFICATE,
             send_cert_args, sizeof(send_cert_args), send_cert_resp,
             sizeof(send_cert_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", send_cert_resp[0],
@@ -810,7 +800,7 @@ int run_fcs_send_certificate(char *cert_data, uint32_t cert_size,
     }
     return ret;
 }
-int run_fcs_service_counter_set_preauthorized(uint8_t type, uint32_t value,
+int fcs_counter_set_preauthorized(uint8_t type, uint32_t value,
         uint32_t test)
 {
     uint64_t cntr_set_preauth_args[3], cntr_set_preauth_err =
@@ -819,7 +809,7 @@ int run_fcs_service_counter_set_preauthorized(uint8_t type, uint32_t value,
     };
     int ret;
     uint16_t status;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
@@ -831,13 +821,13 @@ int run_fcs_service_counter_set_preauthorized(uint8_t type, uint32_t value,
 
     DEBUG("Counter_set_preauthorized: type: %u, value: %u, test: %u",
             (unsigned int)type, value, test);
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_CNTR_SET_PREAUTH,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_CNTR_SET_PREAUTH,
             cntr_set_preauth_args, sizeof(cntr_set_preauth_args),
             &cntr_set_preauth_err, sizeof(cntr_set_preauth_err));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx", cntr_set_preauth_err);
@@ -848,7 +838,7 @@ int run_fcs_service_counter_set_preauthorized(uint8_t type, uint32_t value,
     return ret;
 }
 
-static int run_fcs_get_digest_init(char *uuid,
+int fcs_get_digest_init(char *uuid,
         uint32_t context_id, uint32_t key_id,
         uint32_t op_mode, uint32_t dig_size)
 {
@@ -895,7 +885,7 @@ static int run_fcs_get_digest_init(char *uuid,
             sizeof(fcs_digest_init_args), NULL, 0);
 }
 
-static int run_fcs_get_digest_update(char *uuid, uint32_t context_id,
+int fcs_get_digest_update(char *uuid, uint32_t context_id,
         char *src_data, uint32_t src_size,
         char *digest_data, uint32_t *digest_size,
         uint8_t final)
@@ -924,10 +914,10 @@ static int run_fcs_get_digest_update(char *uuid, uint32_t context_id,
      */
     fcs_digest_update_args[2] = (uint64_t)src_data;
     fcs_digest_update_args[3] = src_size;
-    fcs_digest_update_args[4] = (uint64_t)fcs_out_ops_buffer;
+    fcs_digest_update_args[4] = (uint64_t)fcs_out_ops_buf;
     fcs_digest_update_args[5] = FCS_DIGEST_MAX_RESP;
     fcs_digest_update_args[6] = (uint64_t)FCS_SMMU_GET_ADDR(src_data);
-    cache_force_invalidate(fcs_out_ops_buffer, FCS_DIGEST_MAX_RESP);
+    cache_force_invalidate(fcs_out_ops_buf, FCS_DIGEST_MAX_RESP);
     cache_force_write_back(src_data, src_size);
 
     if (final == FCS_FINALIZE)
@@ -948,7 +938,7 @@ static int run_fcs_get_digest_update(char *uuid, uint32_t context_id,
     }
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx",
@@ -958,7 +948,7 @@ static int run_fcs_get_digest_update(char *uuid, uint32_t context_id,
             if ((fcs_digest_update_smc_resp[FCS_RESP_STATUS] == 0UL) &&
                     (final == FCS_FINALIZE))
             {
-                cache_force_invalidate((void *)fcs_out_ops_buffer,
+                cache_force_invalidate((void *)fcs_out_ops_buf,
                         (size_t)fcs_digest_update_smc_resp[FCS_RESP_SIZE]);
                 /* Ignore the FCS response header in the response,
                  * copy only the required data */
@@ -966,7 +956,7 @@ static int run_fcs_get_digest_update(char *uuid, uint32_t context_id,
                         (uint32_t)fcs_digest_update_smc_resp[FCS_RESP_SIZE] -
                         FCS_RESP_HEADER_SIZE;
                 (void)memcpy((void *)digest_data,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA],
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA],
                         *digest_size);
             }
             status = (uint16_t)fcs_digest_update_smc_resp[FCS_RESP_STATUS];
@@ -975,7 +965,7 @@ static int run_fcs_get_digest_update(char *uuid, uint32_t context_id,
     }
     return ret;
 }
-int run_fcs_get_digest(char *uuid, uint32_t context_id,
+int fcs_obtain_digest(char *uuid, uint32_t context_id,
         uint32_t key_id, uint32_t op_mode, uint32_t dig_size,
         char *src_data, uint32_t src_size, char *digest_data,
         uint32_t *digest_size)
@@ -1007,7 +997,7 @@ int run_fcs_get_digest(char *uuid, uint32_t context_id,
         return -EINVAL;
     }
 
-    ret = run_fcs_get_digest_init(uuid, context_id, key_id, op_mode, dig_size);
+    ret = fcs_get_digest_init(uuid, context_id, key_id, op_mode, dig_size);
     if (ret != 0)
     {
         ERROR("Failed to initialise GET_DIGEST");
@@ -1019,14 +1009,14 @@ int run_fcs_get_digest(char *uuid, uint32_t context_id,
         if (remaining_data > FCS_CRYPTO_BLOCK_SIZE)
         {
             data_written = FCS_CRYPTO_BLOCK_SIZE;
-            ret = run_fcs_get_digest_update(uuid, context_id, src_data,
+            ret = fcs_get_digest_update(uuid, context_id, src_data,
                     FCS_CRYPTO_BLOCK_SIZE, digest_data, digest_size,
                     FCS_UPDATE);
         }
         else
         {
             data_written = remaining_data;
-            ret = run_fcs_get_digest_update(uuid, context_id, src_data,
+            ret = fcs_get_digest_update(uuid, context_id, src_data,
                     remaining_data, digest_data, digest_size, FCS_FINALIZE);
         }
         if (ret == 0)
@@ -1042,7 +1032,7 @@ int run_fcs_get_digest(char *uuid, uint32_t context_id,
     }
     return ret;
 }
-static int run_fcs_mac_verify_init(char *uuid, uint32_t context_id,
+int fcs_mac_verify_init(char *uuid, uint32_t context_id,
         uint32_t key_id, uint32_t dig_size)
 {
     uint64_t fcs_mac_verify_init_args[5];
@@ -1067,10 +1057,10 @@ static int run_fcs_mac_verify_init(char *uuid, uint32_t context_id,
             fcs_mac_verify_init_args, sizeof(fcs_mac_verify_init_args), NULL,
             0);
 }
-static int run_fcs_mac_verify_update(char *uuid, uint32_t context_id,
+int fcs_mac_verify_update(char *uuid, uint32_t context_id,
         char *src_addr, uint32_t src_size,
         char *mac_data, uint32_t mac_data_size,
-        char *dest_data, uint32_t *dest_size,
+        char *dst_data, uint32_t *dst_size,
         uint8_t final)
 {
     (void)mac_data;
@@ -1089,18 +1079,18 @@ static int run_fcs_mac_verify_update(char *uuid, uint32_t context_id,
         return -EIO;
     }
 
-    *dest_size = 0;
+    *dst_size = 0;
     fcs_mac_verify_args[0] = session_id;
     fcs_mac_verify_args[1] = context_id;
     fcs_mac_verify_args[2] = (uint64_t)src_addr;
     fcs_mac_verify_args[3] = (uint64_t)src_size + (uint64_t)mac_data_size;
-    fcs_mac_verify_args[4] = (uint64_t)fcs_out_ops_buffer;
+    fcs_mac_verify_args[4] = (uint64_t)fcs_out_ops_buf;
     fcs_mac_verify_args[5] = FCS_MAC_VERIFY_RESP;
     fcs_mac_verify_args[6] = src_size;
     fcs_mac_verify_args[7] = (uint64_t)FCS_SMMU_GET_ADDR(src_addr);
 
     cache_force_write_back(src_addr, src_size + mac_data_size);
-    cache_force_invalidate(fcs_out_ops_buffer, FCS_MAC_VERIFY_RESP);
+    cache_force_invalidate(fcs_out_ops_buf, FCS_MAC_VERIFY_RESP);
 
     if (final == FCS_UPDATE)
     {
@@ -1122,18 +1112,18 @@ static int run_fcs_mac_verify_update(char *uuid, uint32_t context_id,
     }
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", mac_verify_smc_resp[0],
                     mac_verify_smc_resp[1]);
             if (mac_verify_smc_resp[FCS_RESP_STATUS] == 0UL)
             {
-                cache_flush((void *)fcs_out_ops_buffer,
+                cache_flush((void *)fcs_out_ops_buf,
                         (size_t)mac_verify_smc_resp[FCS_RESP_SIZE]);
-                *dest_size = (uint32_t)mac_verify_smc_resp[FCS_RESP_SIZE];
-                (void)memcpy((void *)dest_data,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA], *dest_size);
+                *dst_size = (uint32_t)mac_verify_smc_resp[FCS_RESP_SIZE];
+                (void)memcpy((void *)dst_data,
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA], *dst_size);
             }
         }
         status = (uint16_t)mac_verify_smc_resp[FCS_RESP_STATUS];
@@ -1141,9 +1131,9 @@ static int run_fcs_mac_verify_update(char *uuid, uint32_t context_id,
     }
     return ret;
 }
-int run_fcs_mac_verify(char *uuid, uint32_t context_id,
+int fcs_do_mac_verification(char *uuid, uint32_t context_id,
         uint32_t key_id, uint32_t dig_size, char *src_data,
-        uint32_t src_size, char *dest_data, uint32_t *dest_size,
+        uint32_t src_size, char *dst_data, uint32_t *dst_size,
         uint32_t user_data_size)
 {
     uint32_t session_id = 0U, remaining_data = src_size, data_written,
@@ -1162,8 +1152,8 @@ int run_fcs_mac_verify(char *uuid, uint32_t context_id,
         ERROR("Invalid Key ID");
         return -EINVAL;
     }
-    if ((((uint64_t)(uintptr_t)src_data % 8UL) != 0UL) || (dest_data == NULL) ||
-            (dest_size == NULL))
+    if ((((uint64_t)(uintptr_t)src_data % 8UL) != 0UL) || (dst_data == NULL) ||
+            (dst_size == NULL))
     {
         ERROR("Invalid address");
         return -EINVAL;
@@ -1173,12 +1163,12 @@ int run_fcs_mac_verify(char *uuid, uint32_t context_id,
         ERROR("Invalid Size");
         return -EINVAL;
     }
-    if ((uuid == NULL) || (src_data == NULL) || (dest_data == NULL))
+    if ((uuid == NULL) || (src_data == NULL) || (dst_data == NULL))
     {
         return -EINVAL;
     }
 
-    ret = run_fcs_mac_verify_init(uuid, context_id, key_id, dig_size);
+    ret = fcs_mac_verify_init(uuid, context_id, key_id, dig_size);
     if (ret != 0)
     {
         ERROR("Failed to initialise mac_verify");
@@ -1194,25 +1184,25 @@ int run_fcs_mac_verify(char *uuid, uint32_t context_id,
             if ((remaining_data - FCS_CRYPTO_BLOCK_SIZE) >= (8U + mac_size))
             {
                 data_written = FCS_CRYPTO_BLOCK_SIZE;
-                ret = run_fcs_mac_verify_update(uuid, context_id, src_data,
-                        data_written, mac_data, 0U, dest_data, dest_size,
+                ret = fcs_mac_verify_update(uuid, context_id, src_data,
+                        data_written, mac_data, 0U, dst_data, dst_size,
                         FCS_UPDATE);
 
             }
             else
             {
                 data_written = remaining_data - (8U + mac_size);
-                ret = run_fcs_mac_verify_update(uuid, context_id, src_data,
-                        data_written, mac_data, 0U, dest_data, dest_size,
+                ret = fcs_mac_verify_update(uuid, context_id, src_data,
+                        data_written, mac_data, 0U, dst_data, dst_size,
                         FCS_UPDATE);
             }
         }
         else
         {
             data_written = remaining_data;
-            ret = run_fcs_mac_verify_update(uuid, context_id, src_data,
-                    remaining_data - mac_size, mac_data, mac_size, dest_data,
-                    dest_size, FCS_FINALIZE);
+            ret = fcs_mac_verify_update(uuid, context_id, src_data,
+                    remaining_data - mac_size, mac_data, mac_size, dst_data,
+                    dst_size, FCS_FINALIZE);
         }
         if (ret == 0)
         {
@@ -1228,7 +1218,7 @@ int run_fcs_mac_verify(char *uuid, uint32_t context_id,
     return ret;
 }
 
-int run_fcs_sdos_encrypt(char *uuid, uint32_t context_id,
+int fcs_encrypt_sdos(char *uuid, uint32_t context_id,
         char *src_data, uint32_t src_size, char *resp_data,
         uint32_t *resp_size)
 {
@@ -1281,7 +1271,7 @@ int run_fcs_sdos_encrypt(char *uuid, uint32_t context_id,
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", sdos_smc_resp[0],
@@ -1298,7 +1288,7 @@ int run_fcs_sdos_encrypt(char *uuid, uint32_t context_id,
     return ret;
 }
 
-int run_fcs_sdos_decrypt(char *uuid, uint32_t context_id,
+int fcs_decrypt_sdos(char *uuid, uint32_t context_id,
         char *src_data, uint32_t src_size, char *resp_data,
         uint32_t *resp_size, uint64_t owner_flag)
 {
@@ -1352,7 +1342,7 @@ int run_fcs_sdos_decrypt(char *uuid, uint32_t context_id,
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", sdos_smc_resp[0],
@@ -1369,9 +1359,9 @@ int run_fcs_sdos_decrypt(char *uuid, uint32_t context_id,
     return ret;
 }
 
-int run_fcs_hkdf_request(char *uuid, uint32_t key_id,
-        uint32_t step_type, uint32_t mac_mode, char *input_buffer,
-        uint32_t output_key_size, uint32_t *hkdf_status)
+int fcs_request_hkdf(char *uuid, uint32_t key_id,
+        uint32_t step_type, uint32_t mac_mode, char *in_buf,
+        uint32_t out_key_size, uint32_t *hkdf_status)
 {
     int ret;
     uint16_t status;
@@ -1387,19 +1377,19 @@ int run_fcs_hkdf_request(char *uuid, uint32_t key_id,
         ERROR("Failed to locate client");
         return -EIO;
     }
-    if (input_buffer == NULL)
+    if (in_buf == NULL)
     {
         ERROR("No buffer provided");
         return -EINVAL;
     }
-    if (output_key_size == 0U)
+    if (out_key_size == 0U)
     {
         ERROR("Invalid output key size");
         return -EINVAL;
     }
 
     /*
-     * HKDF Input buffer data format
+     * HKDF Input buf data format
      * 1st input data size in bytes
      * 1st input data padded to 80 bytes
      * 2nd input data size in bytes
@@ -1409,20 +1399,20 @@ int run_fcs_hkdf_request(char *uuid, uint32_t key_id,
     hkdf_args[0] = session_id;
     hkdf_args[1] = step_type;
     hkdf_args[2] = mac_mode;
-    hkdf_args[3] = (uint64_t)input_buffer;
+    hkdf_args[3] = (uint64_t)in_buf;
     hkdf_args[4] = key_id;
-    hkdf_args[5] = output_key_size;
-    cache_force_write_back(input_buffer, 400);
+    hkdf_args[5] = out_key_size;
+    cache_force_write_back(in_buf, 400);
 
     DEBUG("HKDF_request: key_id: %u, step_type: %u, "
-            "mac_mode: %u, input_buffer: %lx, output_key_size: %u", key_id,
-            step_type, mac_mode, (uint64_t)input_buffer, output_key_size);
+            "mac_mode: %u, in_buf: %lx, out_key_size: %u", key_id,
+            step_type, mac_mode, (uint64_t)in_buf, out_key_size);
     ret = sip_svc_send(fcs_handle, FCS_HKDF_REQUEST, hkdf_args,
             sizeof(hkdf_args), hkdf_resp, sizeof(hkdf_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", hkdf_resp[0],
@@ -1440,7 +1430,7 @@ int run_fcs_hkdf_request(char *uuid, uint32_t key_id,
     return ret;
 }
 
-int run_fcs_get_chip_id(uint32_t *chip_low,
+int fcs_obtain_chip_id(uint32_t *chip_low,
         uint32_t *chip_high)
 {
     uint64_t get_chip_id_resp[FCS_RESP_DATA] =
@@ -1449,19 +1439,19 @@ int run_fcs_get_chip_id(uint32_t *chip_low,
     };
     int ret;
     uint16_t status;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
     }
 
     DEBUG("Get_chip_id: No args");
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_GET_CHIP_ID, NULL,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_GET_CHIP_ID, NULL,
             0, get_chip_id_resp, sizeof(get_chip_id_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x0: %lx, x1: %lx, x2: %lx",
@@ -1480,7 +1470,7 @@ int run_fcs_get_chip_id(uint32_t *chip_low,
     return ret;
 }
 
-int run_fcs_attestation_get_certificate(int cert_req, char *cert_data,
+int fcs_attestation_obtain_certificate(int cert_req, char *cert_data,
         uint32_t *cert_size)
 {
     uint64_t get_attestation_cert_args[3], get_attestation_cert_resp[2] =
@@ -1489,14 +1479,14 @@ int run_fcs_attestation_get_certificate(int cert_req, char *cert_data,
     };
     int ret;
     uint16_t status;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
     }
     if ((cert_data == NULL) || (cert_size == NULL))
     {
-        ERROR("No buffer provided");
+        ERROR("No bufferfer provided");
         return -EINVAL;
     }
     cache_force_invalidate(cert_data, FCS_ATTEST_CERT_MAX_SIZE);
@@ -1507,14 +1497,14 @@ int run_fcs_attestation_get_certificate(int cert_req, char *cert_data,
 
     DEBUG("Get_attestation_certificate: cert_req: %d, "
             "cert_data: %lx", cert_req, (uint64_t)cert_data);
-    ret = sip_svc_send(fcs_descriptor->security_handle,
+    ret = sip_svc_send(fcs_desc.security_handle,
             FCS_GET_ATTESTATION_CERT, get_attestation_cert_args,
             sizeof(get_attestation_cert_args), get_attestation_cert_resp,
             sizeof(get_attestation_cert_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx",
@@ -1532,12 +1522,12 @@ int run_fcs_attestation_get_certificate(int cert_req, char *cert_data,
     return ret;
 }
 
-int run_fcs_attestation_certificate_reload(int cert_req)
+int fcs_attestation_reload_certificate(int cert_req)
 {
     uint64_t cert_on_reload_args[3], cert_reload_err = 0UL;
     int ret;
     uint16_t status;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
@@ -1545,13 +1535,13 @@ int run_fcs_attestation_certificate_reload(int cert_req)
     cert_on_reload_args[0] = (uint64_t)cert_req;
 
     DEBUG("Cert_on_reload: cert_req: %d", cert_req);
-    ret = sip_svc_send(fcs_descriptor->security_handle,
+    ret = sip_svc_send(fcs_desc.security_handle,
             FCS_CREATE_CERT_ON_RELOAD, cert_on_reload_args,
             sizeof(cert_on_reload_args), &cert_reload_err,
             sizeof(cert_reload_err));
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx", cert_reload_err);
@@ -1563,7 +1553,7 @@ int run_fcs_attestation_certificate_reload(int cert_req)
     return ret;
 }
 
-int run_fcs_mctp_cmd_send(char *src_data, uint32_t src_size, char *resp_data,
+int fcs_send_mctp_cmd(char *src_data, uint32_t src_size, char *resp_data,
         uint32_t *resp_size)
 {
     uint64_t mctp_send_args[3], mctp_send_resp[2] =
@@ -1572,7 +1562,7 @@ int run_fcs_mctp_cmd_send(char *src_data, uint32_t src_size, char *resp_data,
     };
     int ret;
     uint16_t status;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
@@ -1592,13 +1582,13 @@ int run_fcs_mctp_cmd_send(char *src_data, uint32_t src_size, char *resp_data,
 
     DEBUG("Mctp_send: src_data: %lx, src_size: %u, resp_data: %lx",
             (uint64_t)src_data, src_size, (uint64_t)resp_data);
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_MCTP_SEND_MSG,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_MCTP_SEND_MSG,
             mctp_send_args, sizeof(mctp_send_args), mctp_send_resp,
             sizeof(mctp_send_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", mctp_send_resp[0],
@@ -1616,7 +1606,7 @@ int run_fcs_mctp_cmd_send(char *src_data, uint32_t src_size, char *resp_data,
     return ret;
 }
 
-int run_fcs_get_jtag_idcode(uint32_t *jtag_id_code)
+int fcs_obtain_jtag_idcode(uint32_t *jtag_id_code)
 {
     uint64_t get_idcode_resp[2] =
     {
@@ -1624,18 +1614,18 @@ int run_fcs_get_jtag_idcode(uint32_t *jtag_id_code)
     };
     int ret;
     uint16_t status;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
     }
 
     DEBUG("Get_jtag_idcode: No args");
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_GET_IDCODE, NULL, 0,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_GET_IDCODE, NULL, 0,
             get_idcode_resp, sizeof(get_idcode_resp));
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", get_idcode_resp[0],
@@ -1653,7 +1643,7 @@ int run_fcs_get_jtag_idcode(uint32_t *jtag_id_code)
     return ret;
 }
 
-int run_fcs_get_device_identity(char *dev_identity, uint32_t *dev_id_size)
+int fcs_obtain_device_identity(char *dev_identity, uint32_t *dev_id_size)
 {
     uint64_t get_device_identity_args[1], get_device_identity_resp[2] =
     {
@@ -1661,7 +1651,7 @@ int run_fcs_get_device_identity(char *dev_identity, uint32_t *dev_id_size)
     };
     int ret;
     uint16_t status;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
@@ -1670,15 +1660,15 @@ int run_fcs_get_device_identity(char *dev_identity, uint32_t *dev_id_size)
 
     get_device_identity_args[0] = (uint64_t)dev_identity;
 
-    DEBUG("Get_device_identity: dev_identity_buffer: %lx",
+    DEBUG("Get_device_identity: dev_identity_buf: %lx",
             (uint64_t)dev_identity);
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_GET_DEVICE_IDENTITY,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_GET_DEVICE_IDENTITY,
             get_device_identity_args, sizeof(get_device_identity_args),
             get_device_identity_resp, sizeof(get_device_identity_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx",
@@ -1756,7 +1746,7 @@ static int fcs_aes_set_params(uint32_t block_mode, uint32_t crypt_mode,
     (void)memcpy((void *)&param_data[3], (void *)iv_data, FCS_AES_IV_SIZE);
     return 0;
 }
-static int run_fcs_aes_crypt_init(char *uuid, uint32_t context_id,
+int fcs_aes_crypt_init(char *uuid, uint32_t context_id,
         uint32_t key_id, uint32_t block_mode, uint32_t crypt_mode,
         uint32_t iv_src, char *iv_data, uint32_t tag_size,
         uint32_t aad_size)
@@ -1773,7 +1763,7 @@ static int run_fcs_aes_crypt_init(char *uuid, uint32_t context_id,
         return -EIO;
     }
     ret = fcs_aes_set_params(block_mode, crypt_mode, iv_src, iv_data, tag_size,
-            aad_size, fcs_inp_ops_buffer, &param_size);
+            aad_size, fcs_in_ops_buf, &param_size);
     DEBUG("AES params: block_mode: %d, crypt_mode: %d, iv_src: %d, "
             "tag_size: %d, aad_size: %d", block_mode, crypt_mode, iv_src,
             tag_size, aad_size);
@@ -1782,12 +1772,12 @@ static int run_fcs_aes_crypt_init(char *uuid, uint32_t context_id,
         ERROR("Failed to set AES params");
         return -EINVAL;
     }
-    cache_force_write_back(fcs_inp_ops_buffer, param_size);
+    cache_force_write_back(fcs_in_ops_buf, param_size);
 
     fcs_aes_init_args[0] = session_id;
     fcs_aes_init_args[1] = context_id;
     fcs_aes_init_args[2] = key_id;
-    fcs_aes_init_args[3] = (uint64_t)fcs_inp_ops_buffer;
+    fcs_aes_init_args[3] = (uint64_t)fcs_in_ops_buf;
     fcs_aes_init_args[4] = param_size;
 
     ret = sip_svc_send(fcs_handle, FCS_AES_INIT, fcs_aes_init_args,
@@ -1795,10 +1785,10 @@ static int run_fcs_aes_crypt_init(char *uuid, uint32_t context_id,
 
     return ret;
 }
-static int run_fcs_aes_update(char *uuid, uint32_t context_id,
-        char *src_addr, uint32_t src_size, char *dest_addr,
-        uint32_t dest_size, uint32_t padding_size,
-        uint8_t final)
+int fcs_aes_update(char *uuid, uint32_t context_id,
+        char *src_addr, uint32_t src_size, char *dst_addr,
+        uint32_t dst_size, char *aad_data, uint32_t aad_size,
+        char *tag_data, uint32_t tag_size, uint8_t final)
 {
     int ret;
     uint16_t status;
@@ -1807,33 +1797,61 @@ static int run_fcs_aes_update(char *uuid, uint32_t context_id,
     {
         0
     };
-    uint32_t session_id = 0U;
+    uint64_t in_size = src_size;
+    uint32_t session_id = 0U, padding1 = 0;
     fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
         ERROR("Failed to locate client");
         return -EIO;
     }
+
+
     cache_force_write_back(src_addr, src_size);
-    cache_force_invalidate(dest_addr, dest_size);
+    cache_force_invalidate(dst_addr, dst_size);
+
+    if (aad_size != 0)
+    {
+        padding1 = aad_size % FCS_GCM_BLOCK_SIZE;
+        memcpy((char *)fcs_in_ops_buf, aad_data, aad_size);
+        memset((char *)fcs_in_ops_buf + aad_size, 0, padding1);
+    }
+    memcpy((char *)fcs_in_ops_buf + aad_size + padding1, src_addr,
+            src_size);
+    in_size += (aad_size + padding1);
+
+    if (tag_data != NULL)
+    {
+        if(tag_size > 0)
+        {
+            /* Tag data is part of the input */
+            memcpy((char *)fcs_in_ops_buf + in_size, tag_data, tag_size);
+            in_size += tag_size;
+        }
+        else
+        {
+            /* We are expecting the tag in the output */
+            dst_size += FCS_GCM_TAG_SIZE;
+        }
+    }
 
     fcs_aes_update_args[0] = session_id;
     fcs_aes_update_args[1] = context_id;
-    fcs_aes_update_args[2] = (uint64_t)(uintptr_t)src_addr;
-    fcs_aes_update_args[3] = src_size;
-    fcs_aes_update_args[4] = (uint64_t)(uintptr_t)dest_addr;
-    fcs_aes_update_args[5] = dest_size;
-    fcs_aes_update_args[6] = padding_size;
+    fcs_aes_update_args[2] = (uint64_t)(uintptr_t)fcs_in_ops_buf;
+    fcs_aes_update_args[3] = in_size;
+    fcs_aes_update_args[4] = (uint64_t)(uintptr_t)fcs_out_ops_buf;
+    fcs_aes_update_args[5] = dst_size;
+    /* We assume data is always aligned */
+    fcs_aes_update_args[6] = (uint64_t)0;
 
     /* SMMU address is used by the mailbox */
-    fcs_aes_update_args[7] = FCS_SMMU_GET_ADDR(src_addr);
-    fcs_aes_update_args[8] = FCS_SMMU_GET_ADDR(dest_addr);
+    fcs_aes_update_args[7] = FCS_SMMU_GET_ADDR(fcs_in_ops_buf);
+    fcs_aes_update_args[8] = FCS_SMMU_GET_ADDR(fcs_out_ops_buf);
     if (final == FCS_UPDATE)
     {
         DEBUG("AES update: src_addr: %lx, src_size: %u, "
-                "dest_addr: %lx, dest_size: %u, padding_size: %u",
-                (uint64_t)src_addr, src_size, (uint64_t)dest_addr, dest_size,
-                padding_size);
+                "dst_addr: %lx, dst_size: %u",
+                (uint64_t)src_addr, src_size, (uint64_t)dst_addr, dst_size);
         ret = sip_svc_send(fcs_handle, FCS_AES_UPDATE, fcs_aes_update_args,
                 sizeof(fcs_aes_update_args), fcs_aes_update_resp,
                 sizeof(fcs_aes_update_resp));
@@ -1841,23 +1859,31 @@ static int run_fcs_aes_update(char *uuid, uint32_t context_id,
     else
     {
         DEBUG("AES finalize: src_addr: %lx, src_size: %u, "
-                "dest_addr: %lx, dest_size: %u, padding_size: %u",
-                (uint64_t)src_addr, src_size, (uint64_t)dest_addr, dest_size,
-                padding_size);
+                "dst_addr: %lx, dst_size: %u",
+                (uint64_t)src_addr, src_size, (uint64_t)dst_addr, dst_size);
         ret = sip_svc_send(fcs_handle, FCS_AES_FINALIZE, fcs_aes_update_args,
                 sizeof(fcs_aes_update_args), fcs_aes_update_resp,
                 sizeof(fcs_aes_update_resp));
     }
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", fcs_aes_update_resp[0],
                     fcs_aes_update_resp[1]);
             if (fcs_aes_update_resp[FCS_RESP_STATUS] == 0U)
             {
-                cache_force_invalidate(dest_addr, dest_size);
+                cache_force_invalidate(fcs_out_ops_buf,
+                        fcs_aes_update_resp[FCS_RESP_SIZE]);
+                if ((src_size != dst_size) && (dst_size != 0))
+                {
+                    /* Output contains tag, copy the tag after the input data */
+                    memcpy(tag_data, (char *)fcs_out_ops_buf + src_size,
+                            dst_size - src_size);
+                }
+                /* Copy encrypted data */
+                memcpy(dst_addr, fcs_out_ops_buf, src_size);
             }
             status = (uint16_t)(fcs_aes_update_resp[FCS_RESP_STATUS] &
                     FCS_STATUS_MASK);
@@ -1868,17 +1894,15 @@ static int run_fcs_aes_update(char *uuid, uint32_t context_id,
     return ret;
 }
 
-int run_fcs_aes_cryption(char *uuid, uint32_t key_id,
+int fcs_aes_cryption(char *uuid, uint32_t key_id,
         uint32_t context_id, uint32_t crypt_mode, uint32_t block_mode,
         uint32_t iv_src, char *iv_data, uint32_t tag_size,
-        uint32_t aad_size, char *aad_data, char *tag_data, char *input_data,
-        uint32_t input_size, char *output_data)
+        uint32_t aad_size, char *aad_data, char *tag_data, char *src_data,
+        uint32_t src_size, char *dst_data, uint32_t *dst_size)
 {
     int ret;
-    int finalized = 0;
-    uint32_t session_id = 0U, data_rem, padding1,
-            padding2, aes_input_size, aes_output_size, input_tag = 0U;
-    char *aes_input_data, *aes_output_data, *temp = NULL;
+    uint32_t session_id = 0U, rem_data = 0U, padding1 = 0U, padding2 = 0U,
+            in_size, out_size, in_tag = 0U, finalized = 0;
     sdm_client_handle_t fcs_handle = get_client_handle(uuid, &session_id);
     if (fcs_handle == NULL)
     {
@@ -1886,49 +1910,46 @@ int run_fcs_aes_cryption(char *uuid, uint32_t key_id,
         return -EIO;
     }
 
-    padding1 = 0;
     padding2 = 0;
-    aes_input_size = 0;
-    input_tag = 0;
+    in_tag = 0;
     if ((block_mode == FCS_AES_GCM) || (block_mode == FCS_AES_GCM_GHASH))
     {
-        /* pad to make it multiple of 16 bytes */
-        if ((aad_size % FCS_GCM_BLOCK_SIZE) != 0U)
+        /* Align the AAD data */
+        padding1 = src_size % FCS_GCM_BLOCK_SIZE;
+        if ((src_size % FCS_GCM_BLOCK_SIZE) != 0U)
         {
-            padding1 = FCS_GCM_BLOCK_SIZE - (aad_size % FCS_GCM_BLOCK_SIZE);
-        }
-        aes_input_size = aad_size + padding1;
-    }
-    aes_input_size += input_size;
-    if ((block_mode == FCS_AES_GCM) || (block_mode == FCS_AES_GCM_GHASH))
-    {
-        if ((input_size % FCS_GCM_BLOCK_SIZE) != 0U)
-        {
-            padding2 = FCS_GCM_BLOCK_SIZE - (input_size % FCS_GCM_BLOCK_SIZE);
+            padding2 = FCS_GCM_BLOCK_SIZE - (src_size % FCS_GCM_BLOCK_SIZE);
         }
     }
     else
     {
         /* Non GCM modes have 32 byte blocks and aad data is not applicable*/
-        if ((input_size % FCS_NON_GCM_BLOCK_SIZE) != 0U)
+        if ((src_size % FCS_NON_GCM_BLOCK_SIZE) != 0U)
         {
-            padding2 = FCS_NON_GCM_BLOCK_SIZE - (input_size %
+            padding2 = FCS_NON_GCM_BLOCK_SIZE - (src_size %
                     FCS_NON_GCM_BLOCK_SIZE);
-            aad_size = 0U;
         }
+        aad_size = 0U;
     }
     if (padding2 != 0U)
     {
         DEBUG("Padding input data with %u bytes", padding2);
     }
-    aes_input_size += padding2;
+
+    if (block_mode == FCS_AES_GCM_GHASH)
+    {
+        *dst_size = 0;
+    }
+    else
+    {
+        *dst_size = src_size + padding2;
+    }
     if (((crypt_mode == FCS_AES_DECRYPT_MODE) && (block_mode == FCS_AES_GCM)) ||
             (block_mode == FCS_AES_GCM_GHASH))
     {
-        aes_input_size += FCS_GCM_TAG_SIZE;
-        input_tag = FCS_GCM_TAG_SIZE;
+        in_tag = FCS_GCM_TAG_SIZE;
     }
-    ret = run_fcs_aes_crypt_init(uuid, context_id, key_id, block_mode,
+    ret = fcs_aes_crypt_init(uuid, context_id, key_id, block_mode,
             crypt_mode, iv_src, iv_data, tag_size, aad_size);
     if (ret != 0)
     {
@@ -1941,21 +1962,15 @@ int run_fcs_aes_cryption(char *uuid, uint32_t key_id,
      * padding2(for GCM modes), tag data(if applicable)
      */
 
-    /* Setting initial data */
-    aes_input_data = (char *)fcs_inp_ops_buffer;
-    aes_output_data = (char *)fcs_out_ops_buffer;
-    (void)memcpy(aes_input_data, aad_data, aad_size);
-    (void)memset(aes_input_data + aad_size, 0, padding1);
-
-    data_rem = aes_input_size;
-    while (data_rem > 0U)
+    rem_data = aad_size + padding1 + src_size + padding2 + in_tag;
+    while (rem_data > 0U)
     {
-        if (data_rem > FCS_CRYPTO_BLOCK_SIZE)
+        if (rem_data > FCS_CRYPTO_BLOCK_SIZE)
         {
-            aes_input_size = FCS_CRYPTO_BLOCK_SIZE;
+            in_size = FCS_CRYPTO_BLOCK_SIZE - (aad_size + padding1);
             if (block_mode == FCS_AES_GCM_GHASH)
             {
-                aes_output_size = 0;
+                out_size = 0;
             }
             else
             {
@@ -1963,46 +1978,41 @@ int run_fcs_aes_cryption(char *uuid, uint32_t key_id,
                  * padding1 and aad_size is 0 for non GCM modes so only
                  * input size is taken
                  */
-                aes_output_size = aes_input_size - (aad_size + padding1);
+                out_size = in_size;
             }
-            (void)memcpy(aes_input_data + aad_size + padding1, input_data,
-                    aes_input_size - (aad_size + padding1));
-            ret = run_fcs_aes_update(uuid, context_id, aes_input_data,
-                    aes_input_size, aes_output_data, aes_output_size, 0,
-                    FCS_UPDATE);
-            /* aad data and padding written to SDM if applicable */
-            aad_size = 0;
-            padding1 = 0;
+            ret = fcs_aes_update(uuid, context_id, src_data,
+                    in_size, dst_data, out_size, aad_data,
+                    aad_size, NULL, 0, FCS_UPDATE);
         }
         else
         {
             if (((crypt_mode == FCS_AES_DECRYPT_MODE) && (block_mode ==
                     FCS_AES_GCM)) || (block_mode == FCS_AES_GCM_GHASH))
             {
-                if (data_rem > (FCS_CRYPTO_BLOCK_SIZE - FCS_GCM_TAG_SIZE))
+                if (rem_data > (FCS_CRYPTO_BLOCK_SIZE - FCS_GCM_TAG_SIZE))
                 {
                     /* Sending all data except the tag data in last update*/
-                    aes_input_size = FCS_CRYPTO_BLOCK_SIZE - FCS_GCM_TAG_SIZE;
+                    in_size = FCS_CRYPTO_BLOCK_SIZE -
+                            (FCS_GCM_TAG_SIZE + aad_size + padding1);
                     if (block_mode == FCS_AES_GCM_GHASH)
                     {
-                        aes_output_size = 0;
+                        out_size = 0;
                     }
                     else
                     {
-                        aes_output_size = FCS_CRYPTO_BLOCK_SIZE -
+                        out_size = FCS_CRYPTO_BLOCK_SIZE -
                                 (FCS_GCM_TAG_SIZE + aad_size + padding1);
                     }
-                    (void)memcpy(aes_input_data + aad_size + padding1,
-                            input_data, aes_input_size - (aad_size + padding1));
 
-                    ret = run_fcs_aes_update(uuid, context_id, aes_input_data,
-                            aes_input_size, aes_output_data, aes_output_size,
-                            padding2, FCS_UPDATE);
+                    ret = fcs_aes_update(uuid, context_id, src_data,
+                            FCS_CRYPTO_BLOCK_SIZE - FCS_GCM_TAG_SIZE,
+                            dst_data, out_size, aad_data,
+                            aad_size, NULL, 0, FCS_UPDATE);
                     if (ret == 0)
                     {
-                        data_rem -= aes_input_size;
-                        aes_input_data += aes_input_size;
-                        output_data += aes_output_size;
+                        rem_data -= (FCS_CRYPTO_BLOCK_SIZE - FCS_GCM_TAG_SIZE);
+                        src_data += (FCS_CRYPTO_BLOCK_SIZE - FCS_GCM_TAG_SIZE);
+                        dst_data += out_size;
                     }
                     else
                     {
@@ -2013,67 +2023,46 @@ int run_fcs_aes_cryption(char *uuid, uint32_t key_id,
                 /* If false, we just send all the data at once */
             }
             /* doesn't affect non GCM modes */
-            aes_input_size = data_rem;
+            in_size = rem_data;
+            in_size = rem_data - (in_tag + aad_size + padding1);
             if (block_mode == FCS_AES_GCM_GHASH)
             {
-                aes_output_size = 0;
+                out_size = 0;
             }
             else
             {
-                aes_output_size = aes_input_size - (aad_size + padding1 +
-                        input_tag);
+                out_size = in_size;
             }
-            if ((block_mode == FCS_AES_GCM) && (crypt_mode ==
-                    FCS_AES_ENCRYPT_MODE))
-            {
-                aes_output_size += FCS_GCM_TAG_SIZE;
-            }
-            finalized = 1;
-            /* Copy input data to the input buffer */
-            (void)memcpy(aes_input_data + aad_size + padding1, input_data,
-                    aes_input_size);
-            (void)memset(aes_input_data + aad_size + padding1 + input_size
-                    , 0, padding2);
-            /* Copying tag data */
-            (void)memcpy(
-                    aes_input_data + aad_size + padding1 + input_size +
-                    padding2, tag_data, input_tag);
 
-            ret = run_fcs_aes_update(uuid, context_id, aes_input_data,
-                    aes_input_size, aes_output_data, aes_output_size, padding2,
-                    FCS_FINALIZE);
+            ret = fcs_aes_update(uuid, context_id, src_data,
+                    in_size, dst_data, out_size,
+                    aad_data, aad_size, tag_data, in_tag, FCS_FINALIZE);
+            finalized = 1;
         }
         if (ret == 0)
         {
-            if ((block_mode == FCS_AES_GCM) && (crypt_mode ==
-                    FCS_AES_ENCRYPT_MODE) && (finalized == 1))
-            {
-                /* GCM mode, tag is appended to output data */
-                (void)memcpy(output_data, aes_output_data, aes_output_size -
-                        FCS_GCM_TAG_SIZE);
-                (void)memcpy(tag_data, aes_output_data + aes_output_size -
-                        FCS_GCM_TAG_SIZE, FCS_GCM_TAG_SIZE);
-            }
-            else
-            {
-                (void)memcpy(output_data, aes_output_data, aes_output_size);
-            }
             /* Increment the block */
-            data_rem -= aes_input_size;
-            output_data += aes_output_size;
+            rem_data -= (in_size + aad_size + padding1);
+            src_data += in_size;
+            dst_data += out_size;
+            /* aad data and padding written only once */
+            aad_size = 0;
+            padding1 = 0;
+            if (finalized != 0U)
+            {
+                rem_data -= in_tag;
+            }
         }
         else
         {
             ERROR("AES_CRYPTION failed");
             break;
         }
-        memset(fcs_inp_ops_buffer, 0, sizeof(fcs_inp_ops_buffer));
     }
-    aes_input_data = temp;
     return ret;
 }
 
-int run_fcs_ecdsa_hash_sign(char *uuid, uint32_t context_id, uint32_t key_id,
+int fcs_ecdsa_hash_signing(char *uuid, uint32_t context_id, uint32_t key_id,
         uint32_t ecc_algo, char *hash_data, uint32_t hash_data_size,
         char *signed_data, uint32_t *signed_data_size)
 {
@@ -2112,13 +2101,13 @@ int run_fcs_ecdsa_hash_sign(char *uuid, uint32_t context_id, uint32_t key_id,
         return ret;
     }
     cache_force_write_back(hash_data, hash_data_size);
-    cache_force_invalidate(fcs_out_ops_buffer, FCS_ECDSA_HASH_SIGN_MAX_RESP);
+    cache_force_invalidate(fcs_out_ops_buf, FCS_ECDSA_HASH_SIGN_MAX_RESP);
 
     fcs_hash_sign_args[0] = session_id;
     fcs_hash_sign_args[1] = context_id;
     fcs_hash_sign_args[2] = (uint64_t)hash_data;
     fcs_hash_sign_args[3] = hash_data_size;
-    fcs_hash_sign_args[4] = (uint64_t)fcs_out_ops_buffer;
+    fcs_hash_sign_args[4] = (uint64_t)fcs_out_ops_buf;
     fcs_hash_sign_args[5] = FCS_ECDSA_HASH_SIGN_MAX_RESP;
 
     DEBUG("Hash data sign finalize: Hash data: %lx, Hash data size: %u",
@@ -2129,21 +2118,21 @@ int run_fcs_ecdsa_hash_sign(char *uuid, uint32_t context_id, uint32_t key_id,
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response x1: %lx, x2: %lx", hash_sign_smc_resp[0],
                     hash_sign_smc_resp[1]);
             if (hash_sign_smc_resp[FCS_RESP_STATUS] == 0U)
             {
-                cache_force_invalidate((void *)fcs_out_ops_buffer,
+                cache_force_invalidate((void *)fcs_out_ops_buf,
                         (size_t)hash_sign_smc_resp[FCS_RESP_SIZE]);
                 /* Ignoring the FCS response header */
                 *signed_data_size =
                         (uint32_t)hash_sign_smc_resp[FCS_RESP_SIZE] -
                         FCS_RESP_HEADER_SIZE;
                 (void)memcpy((void *)signed_data,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA],
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA],
                         *signed_data_size);
             }
             status = (uint16_t)hash_sign_smc_resp[FCS_RESP_STATUS];
@@ -2152,11 +2141,11 @@ int run_fcs_ecdsa_hash_sign(char *uuid, uint32_t context_id, uint32_t key_id,
     }
     return ret;
 }
-int run_fcs_ecdsa_hash_verify(char *uuid, uint32_t context_id,
+int fcs_do_ecdsa_hash_verification(char *uuid, uint32_t context_id,
         uint32_t key_id, uint32_t ecc_algo, char *hash_data,
         uint32_t hash_data_size, char *sig_data, uint32_t sig_size,
-        char *pub_key_data, uint32_t pub_key_size, char *dest_data,
-        uint32_t *dest_size)
+        char *pub_key_data, uint32_t pub_key_size, char *dst_data,
+        uint32_t *dst_size)
 {
     int ret;
     uint16_t status;
@@ -2197,24 +2186,24 @@ int run_fcs_ecdsa_hash_verify(char *uuid, uint32_t context_id,
         return ret;
     }
 
-    (void)memcpy(fcs_inp_ops_buffer, hash_data, hash_data_size);
-    (void)memcpy(fcs_inp_ops_buffer + (hash_data_size / sizeof(uint32_t)),
+    (void)memcpy(fcs_in_ops_buf, hash_data, hash_data_size);
+    (void)memcpy(fcs_in_ops_buf + (hash_data_size / sizeof(uint32_t)),
             sig_data, sig_size);
     mbox_arg_size = hash_data_size + sig_size;
     if ((pub_key_data != NULL) && (pub_key_size != 0U))
     {
-        (void)memcpy(fcs_inp_ops_buffer + ((hash_data_size + sig_size) /
+        (void)memcpy(fcs_in_ops_buf + ((hash_data_size + sig_size) /
                 sizeof(uint32_t)), pub_key_data, pub_key_size);
         mbox_arg_size += pub_key_size;
     }
-    cache_force_write_back(fcs_inp_ops_buffer, mbox_arg_size);
-    cache_force_invalidate(fcs_out_ops_buffer, FCS_ECDSA_HASH_VERIFY_RESP);
+    cache_force_write_back(fcs_in_ops_buf, mbox_arg_size);
+    cache_force_invalidate(fcs_out_ops_buf, FCS_ECDSA_HASH_VERIFY_RESP);
 
     fcs_hash_sign_verify_args[0] = session_id;
     fcs_hash_sign_verify_args[1] = context_id;
-    fcs_hash_sign_verify_args[2] = (uint64_t)fcs_inp_ops_buffer;
+    fcs_hash_sign_verify_args[2] = (uint64_t)fcs_in_ops_buf;
     fcs_hash_sign_verify_args[3] = mbox_arg_size;
-    fcs_hash_sign_verify_args[4] = (uint64_t)fcs_out_ops_buffer;
+    fcs_hash_sign_verify_args[4] = (uint64_t)fcs_out_ops_buf;
     fcs_hash_sign_verify_args[5] = FCS_ECDSA_HASH_VERIFY_RESP;
 
     DEBUG("Hash data sign verify finalize: Hash data: %lx, "
@@ -2229,21 +2218,21 @@ int run_fcs_ecdsa_hash_verify(char *uuid, uint32_t context_id,
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1: %lx, x2: %lx",
                     hash_sign_verify_smc_resp[0], hash_sign_verify_smc_resp[1]);
             if (hash_sign_verify_smc_resp[FCS_RESP_STATUS] == 0UL)
             {
-                cache_force_invalidate((void *)fcs_out_ops_buffer,
+                cache_force_invalidate((void *)fcs_out_ops_buf,
                         (size_t)hash_sign_verify_smc_resp[FCS_RESP_SIZE]);
                 /* Ignoring the FCS response header */
-                *dest_size =
+                *dst_size =
                         (uint32_t)hash_sign_verify_smc_resp[FCS_RESP_SIZE] -
                         FCS_RESP_HEADER_SIZE;
-                (void)memcpy((void *)dest_data,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA], *dest_size);
+                (void)memcpy((void *)dst_data,
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA], *dst_size);
             }
             status = (uint16_t)hash_sign_verify_smc_resp[FCS_RESP_STATUS];
             ret = (int)status;
@@ -2252,7 +2241,7 @@ int run_fcs_ecdsa_hash_verify(char *uuid, uint32_t context_id,
     return ret;
 }
 
-static int run_fcs_ecdsa_sha2_data_sign_init(char *uuid,
+int fcs_ecdsa_sha2_data_sign_init(char *uuid,
         uint32_t context_id, uint32_t key_id, uint32_t ecc_algo)
 {
     int ret;
@@ -2286,9 +2275,9 @@ static int run_fcs_ecdsa_sha2_data_sign_init(char *uuid,
     return ret;
 }
 
-static int run_fcs_ecdsa_sha2_data_sign_update(char *uuid,
+int fcs_ecdsa_sha2_data_sign_update(char *uuid,
         uint32_t context_id, char *src_addr, uint32_t src_size,
-        char *dest_data, uint32_t *dest_size, uint8_t final)
+        char *dst_data, uint32_t *dst_size, uint8_t final)
 {
     int ret;
     uint16_t status;
@@ -2305,7 +2294,7 @@ static int run_fcs_ecdsa_sha2_data_sign_update(char *uuid,
         return -EIO;
     }
 
-    cache_force_invalidate(fcs_out_ops_buffer,
+    cache_force_invalidate(fcs_out_ops_buf,
             FCS_ECDSA_HASH_SHA2_SIGN_MAX_RESP);
     cache_force_write_back(src_addr, src_size);
 
@@ -2313,7 +2302,7 @@ static int run_fcs_ecdsa_sha2_data_sign_update(char *uuid,
     fcs_sha2_sign_args[1] = context_id;
     fcs_sha2_sign_args[2] = (uint64_t)src_addr;
     fcs_sha2_sign_args[3] = src_size;
-    fcs_sha2_sign_args[4] = (uint64_t)fcs_out_ops_buffer;
+    fcs_sha2_sign_args[4] = (uint64_t)fcs_out_ops_buf;
     fcs_sha2_sign_args[5] = FCS_ECDSA_HASH_SHA2_SIGN_MAX_RESP;
     fcs_sha2_sign_args[6] = FCS_SMMU_GET_ADDR(src_addr);
 
@@ -2335,7 +2324,7 @@ static int run_fcs_ecdsa_sha2_data_sign_update(char *uuid,
     }
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1: %lx, x2: %lx", sha2_sign_smc_resp[0],
@@ -2343,13 +2332,13 @@ static int run_fcs_ecdsa_sha2_data_sign_update(char *uuid,
             if ((sha2_sign_smc_resp[FCS_RESP_STATUS] == 0UL) && (final ==
                     FCS_FINALIZE))
             {
-                cache_force_invalidate((void *)fcs_out_ops_buffer,
+                cache_force_invalidate((void *)fcs_out_ops_buf,
                         (size_t)sha2_sign_smc_resp[FCS_RESP_SIZE]);
                 /* Ignoring the FCS response header */
-                *dest_size = (uint32_t)sha2_sign_smc_resp[FCS_RESP_SIZE] -
+                *dst_size = (uint32_t)sha2_sign_smc_resp[FCS_RESP_SIZE] -
                         FCS_RESP_HEADER_SIZE;
-                (void)memcpy((void *)dest_data,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA], *dest_size);
+                (void)memcpy((void *)dst_data,
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA], *dst_size);
             }
             status = (uint16_t)sha2_sign_smc_resp[FCS_RESP_STATUS];
             ret = (int)status;
@@ -2357,9 +2346,9 @@ static int run_fcs_ecdsa_sha2_data_sign_update(char *uuid,
     }
     return ret;
 }
-int run_fcs_ecdsa_sha2_data_sign(char *uuid, uint32_t context_id,
+int fcs_ecdsa_sha2_data_signing(char *uuid, uint32_t context_id,
         uint32_t key_id, uint32_t ecc_algo, char *src_data,
-        uint32_t src_size, char *dest_data, uint32_t *dest_size)
+        uint32_t src_size, char *dst_data, uint32_t *dst_size)
 {
     uint32_t session_id = 0U, remaining_data = src_size, data_written;
     int ret;
@@ -2375,12 +2364,12 @@ int run_fcs_ecdsa_sha2_data_sign(char *uuid, uint32_t context_id,
         ERROR("Invalid Key ID");
         return -EINVAL;
     }
-    if ((uuid == NULL) || (src_data == NULL) || (dest_data == NULL))
+    if ((uuid == NULL) || (src_data == NULL) || (dst_data == NULL))
     {
         return -EINVAL;
     }
-    if ((((uint64_t)(uintptr_t)src_data % 8UL) != 0UL) || (dest_data == NULL) ||
-            (dest_size == NULL))
+    if ((((uint64_t)(uintptr_t)src_data % 8UL) != 0UL) || (dst_data == NULL) ||
+            (dst_size == NULL))
     {
         ERROR("Invalid address");
         return -EINVAL;
@@ -2391,7 +2380,7 @@ int run_fcs_ecdsa_sha2_data_sign(char *uuid, uint32_t context_id,
         return -EINVAL;
     }
 
-    ret = run_fcs_ecdsa_sha2_data_sign_init(uuid, context_id, key_id, ecc_algo);
+    ret = fcs_ecdsa_sha2_data_sign_init(uuid, context_id, key_id, ecc_algo);
     if (ret != 0)
     {
         ERROR("Failed to initialise sha2_data_sign");
@@ -2403,15 +2392,15 @@ int run_fcs_ecdsa_sha2_data_sign(char *uuid, uint32_t context_id,
         if (remaining_data > FCS_CRYPTO_BLOCK_SIZE)
         {
             data_written = FCS_CRYPTO_BLOCK_SIZE;
-            ret = run_fcs_ecdsa_sha2_data_sign_update(uuid, context_id,
-                    src_data, FCS_CRYPTO_BLOCK_SIZE, dest_data, dest_size,
+            ret = fcs_ecdsa_sha2_data_sign_update(uuid, context_id,
+                    src_data, FCS_CRYPTO_BLOCK_SIZE, dst_data, dst_size,
                     FCS_UPDATE);
         }
         else
         {
             data_written = remaining_data;
-            ret = run_fcs_ecdsa_sha2_data_sign_update(uuid, context_id,
-                    src_data, remaining_data, dest_data, dest_size,
+            ret = fcs_ecdsa_sha2_data_sign_update(uuid, context_id,
+                    src_data, remaining_data, dst_data, dst_size,
                     FCS_FINALIZE);
         }
         if (ret == 0)
@@ -2426,7 +2415,7 @@ int run_fcs_ecdsa_sha2_data_sign(char *uuid, uint32_t context_id,
     }
     return ret;
 }
-static int run_fcs_ecdsa_sha2_data_sign_verify_init(char *uuid,
+int fcs_ecdsa_sha2_data_sign_verification_init(char *uuid,
         uint32_t context_id, uint32_t key_id, uint32_t ecc_algo)
 {
     sdm_client_handle_t fcs_handle;
@@ -2462,11 +2451,11 @@ static int run_fcs_ecdsa_sha2_data_sign_verify_init(char *uuid,
  * Signature data should be stored after the input data
  * If pubkey is provided, ensure its after the signature to be verified
  */
-static int run_fcs_ecdsa_sha2_data_sign_verify_update(char *uuid,
+int fcs_ecdsa_sha2_data_sign_verification_update(char *uuid,
         uint32_t context_id, char *src_addr, uint32_t src_size,
         char *signed_data, uint32_t sig_size, char *pub_key_data,
-        uint32_t pub_key_size, char *dest_data,
-        uint32_t *dest_size, uint8_t final)
+        uint32_t pub_key_size, char *dst_data,
+        uint32_t *dst_size, uint8_t final)
 {
     int ret;
     uint16_t status;
@@ -2484,28 +2473,28 @@ static int run_fcs_ecdsa_sha2_data_sign_verify_update(char *uuid,
         return -EIO;
     }
 
-    (void)memcpy(fcs_inp_ops_buffer, (char *)(uintptr_t)src_addr, src_size);
-    (void)memcpy(fcs_inp_ops_buffer + (src_size / sizeof(uint32_t)),
+    (void)memcpy(fcs_in_ops_buf, (char *)(uintptr_t)src_addr, src_size);
+    (void)memcpy(fcs_in_ops_buf + (src_size / sizeof(uint32_t)),
             signed_data, sig_size);
     payload_size = src_size + sig_size;
     if (pub_key_data != NULL)
     {
-        (void)memcpy(fcs_inp_ops_buffer + (payload_size /
+        (void)memcpy(fcs_in_ops_buf + (payload_size /
                 sizeof(uint32_t)), pub_key_data, pub_key_size);
         payload_size += pub_key_size;
     }
-    cache_force_invalidate(fcs_out_ops_buffer, FCS_ECDSA_HASH_SHA2_VERIFY_RESP);
-    cache_force_write_back(fcs_inp_ops_buffer, payload_size);
+    cache_force_invalidate(fcs_out_ops_buf, FCS_ECDSA_HASH_SHA2_VERIFY_RESP);
+    cache_force_write_back(fcs_in_ops_buf, payload_size);
 
     fcs_sha2_sign_verify_args[0] = session_id;
     fcs_sha2_sign_verify_args[1] = context_id;
-    fcs_sha2_sign_verify_args[2] = (uint64_t)fcs_inp_ops_buffer;
+    fcs_sha2_sign_verify_args[2] = (uint64_t)fcs_in_ops_buf;
     fcs_sha2_sign_verify_args[3] = payload_size;
-    fcs_sha2_sign_verify_args[4] = (uint64_t)fcs_out_ops_buffer;
+    fcs_sha2_sign_verify_args[4] = (uint64_t)fcs_out_ops_buf;
     fcs_sha2_sign_verify_args[5] = FCS_ECDSA_HASH_SHA2_VERIFY_RESP;
     fcs_sha2_sign_verify_args[6] = src_size;
     fcs_sha2_sign_verify_args[7] = FCS_SMMU_GET_ADDR(
-            (uint64_t)fcs_inp_ops_buffer);
+            (uint64_t)fcs_in_ops_buf);
 
     if (final == FCS_UPDATE)
     {
@@ -2516,7 +2505,7 @@ static int run_fcs_ecdsa_sha2_data_sign_verify_update(char *uuid,
                 (uint64_t)(uintptr_t)signed_data, sig_size);
         if (pub_key_data != NULL)
         {
-            printf("Pub key data: %lx, Pub key size: %u\n",
+            DEBUG("Pub key data: %lx, Pub key size: %u\n",
                     (uint64_t)pub_key_data, pub_key_size);
         }
 
@@ -2532,7 +2521,7 @@ static int run_fcs_ecdsa_sha2_data_sign_verify_update(char *uuid,
     }
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP SVC response: x1: %lx, x2: %lx",
@@ -2540,14 +2529,14 @@ static int run_fcs_ecdsa_sha2_data_sign_verify_update(char *uuid,
             if ((sha2_sign_verify_smc_resp[FCS_RESP_STATUS] == 0UL) && (final ==
                     FCS_FINALIZE))
             {
-                cache_flush((void *)fcs_out_ops_buffer,
+                cache_flush((void *)fcs_out_ops_buf,
                         (size_t)sha2_sign_verify_smc_resp[FCS_RESP_SIZE]);
                 /* Ignoring the FCS response header */
-                *dest_size =
+                *dst_size =
                         (uint32_t)sha2_sign_verify_smc_resp[FCS_RESP_SIZE] -
                         FCS_RESP_HEADER_SIZE;
-                (void)memcpy((void *)dest_data,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA], *dest_size);
+                (void)memcpy((void *)dst_data,
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA], *dst_size);
             }
             status = (uint16_t)sha2_sign_verify_smc_resp[FCS_RESP_STATUS];
             ret = (int)status;
@@ -2555,11 +2544,11 @@ static int run_fcs_ecdsa_sha2_data_sign_verify_update(char *uuid,
     }
     return ret;
 }
-int run_fcs_ecdsa_sha2_data_sign_verify(char *uuid,
+int fcs_do_ecdsa_sha2_data_sign_verification(char *uuid,
         uint32_t context_id, uint32_t key_id, uint32_t ecc_algo,
         char *src_data, uint32_t src_size, char *signed_data,
         uint32_t sig_size, char *pub_key_data, uint32_t pub_key_size,
-        char *dest_data, uint32_t *dest_size)
+        char *dst_data, uint32_t *dst_size)
 {
     uint32_t session_id = 0U,
             remaining_data = src_size + sig_size + pub_key_size, data_written;
@@ -2571,7 +2560,7 @@ int run_fcs_ecdsa_sha2_data_sign_verify(char *uuid,
         return -EIO;
     }
     if ((uuid == NULL) || (src_data == NULL) || (signed_data == NULL) ||
-            (dest_data == NULL))
+            (dst_data == NULL))
     {
         return -EINVAL;
     }
@@ -2581,8 +2570,8 @@ int run_fcs_ecdsa_sha2_data_sign_verify(char *uuid,
         ERROR("Invalid Key ID");
         return -EINVAL;
     }
-    if ((((uint64_t)(uintptr_t)src_data % 8UL) != 0UL) || (dest_data == NULL) ||
-            (dest_size == NULL))
+    if ((((uint64_t)(uintptr_t)src_data % 8UL) != 0UL) || (dst_data == NULL) ||
+            (dst_size == NULL))
     {
         ERROR("Invalid address");
         return -EINVAL;
@@ -2593,7 +2582,7 @@ int run_fcs_ecdsa_sha2_data_sign_verify(char *uuid,
         return -EINVAL;
     }
 
-    ret = run_fcs_ecdsa_sha2_data_sign_verify_init(uuid, context_id, key_id,
+    ret = fcs_ecdsa_sha2_data_sign_verification_init(uuid, context_id, key_id,
             ecc_algo);
     if (ret != 0)
     {
@@ -2618,17 +2607,17 @@ int run_fcs_ecdsa_sha2_data_sign_verify(char *uuid,
             {
                 data_written = remaining_data - (8U + sig_size + pub_key_size);
             }
-            ret = run_fcs_ecdsa_sha2_data_sign_verify_update(uuid, context_id,
+            ret = fcs_ecdsa_sha2_data_sign_verification_update(uuid, context_id,
                     src_data, data_written, signed_data, 0U, pub_key_data, 0U,
-                    dest_data, dest_size, FCS_UPDATE);
+                    dst_data, dst_size, FCS_UPDATE);
         }
         else
         {
             data_written = remaining_data;
             src_size = data_written - (sig_size + pub_key_size);
-            ret = run_fcs_ecdsa_sha2_data_sign_verify_update(uuid, context_id,
+            ret = fcs_ecdsa_sha2_data_sign_verification_update(uuid, context_id,
                     src_data, src_size, signed_data, sig_size, pub_key_data,
-                    pub_key_size, dest_data, dest_size, FCS_FINALIZE);
+                    pub_key_size, dst_data, dst_size, FCS_FINALIZE);
         }
         if (ret == 0)
         {
@@ -2643,7 +2632,7 @@ int run_fcs_ecdsa_sha2_data_sign_verify(char *uuid,
     return ret;
 }
 
-int run_fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id,
+int fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id,
         uint32_t key_id, uint32_t ecc_algo, char *pub_key_data,
         uint32_t *pub_key_size)
 {
@@ -2683,11 +2672,11 @@ int run_fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id,
         return ret;
     }
 
-    cache_force_invalidate(fcs_out_ops_buffer, FCS_GET_PUBKEY_RESP);
+    cache_force_invalidate(fcs_out_ops_buf, FCS_GET_PUBKEY_RESP);
 
     fcs_get_pubkey_args[0] = session_id;
     fcs_get_pubkey_args[1] = context_id;
-    fcs_get_pubkey_args[2] = (uint64_t)fcs_out_ops_buffer;
+    fcs_get_pubkey_args[2] = (uint64_t)fcs_out_ops_buf;
     fcs_get_pubkey_args[3] = FCS_GET_PUBKEY_RESP;
     ret = sip_svc_send(fcs_handle, FCS_GET_PUBKEY_FINALIZE, fcs_get_pubkey_args,
             sizeof(fcs_get_pubkey_args), get_pubkey_smc_resp,
@@ -2695,7 +2684,7 @@ int run_fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id,
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1 %lx, x2 %lx",
@@ -2704,12 +2693,12 @@ int run_fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id,
             if (get_pubkey_smc_resp[FCS_RESP_STATUS] == 0UL)
             {
                 /* Ignoring the FCS response header */
-                cache_force_invalidate(fcs_out_ops_buffer,
+                cache_force_invalidate(fcs_out_ops_buf,
                         (size_t)get_pubkey_smc_resp[FCS_RESP_SIZE]);
                 *pub_key_size = (uint32_t)get_pubkey_smc_resp[FCS_RESP_SIZE] -
                         FCS_RESP_HEADER_SIZE;
                 (void)memcpy((void *)pub_key_data,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA],
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA],
                         *pub_key_size);
             }
             status = (uint16_t)get_pubkey_smc_resp[FCS_RESP_STATUS];
@@ -2719,7 +2708,7 @@ int run_fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id,
     return ret;
 }
 
-int run_fcs_ecdh_request(char *uuid, uint32_t key_id,
+int fcs_request_ecdh(char *uuid, uint32_t key_id,
         uint32_t context_id, uint32_t ecc_algo, char *pub_key_data,
         uint32_t pub_key_size, char *shared_sec_data,
         uint32_t *shared_sec_size)
@@ -2765,7 +2754,7 @@ int run_fcs_ecdh_request(char *uuid, uint32_t key_id,
         return ret;
     }
 
-    cache_force_invalidate(fcs_out_ops_buffer, FCS_ECDH_MAX_RESP);
+    cache_force_invalidate(fcs_out_ops_buf, FCS_ECDH_MAX_RESP);
     cache_force_write_back(pub_key_data, pub_key_size);
 
     *shared_sec_size = FCS_ECDH_MAX_RESP;
@@ -2773,7 +2762,7 @@ int run_fcs_ecdh_request(char *uuid, uint32_t key_id,
     fcs_ecdh_args[1] = context_id;
     fcs_ecdh_args[2] = (uint64_t)pub_key_data;
     fcs_ecdh_args[3] = pub_key_size;
-    fcs_ecdh_args[4] = (uint64_t)fcs_out_ops_buffer;
+    fcs_ecdh_args[4] = (uint64_t)fcs_out_ops_buf;
     fcs_ecdh_args[5] = FCS_ECDH_MAX_RESP;
 
     DEBUG("ECDH finalize: pub_key_addr: %lx, pub_key_size: %u",
@@ -2783,7 +2772,7 @@ int run_fcs_ecdh_request(char *uuid, uint32_t key_id,
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1 %lx, x2 %lx",
@@ -2791,13 +2780,13 @@ int run_fcs_ecdh_request(char *uuid, uint32_t key_id,
                     ecdh_smc_resp[FCS_RESP_SIZE]);
             if (ecdh_smc_resp[FCS_RESP_STATUS] == 0UL)
             {
-                cache_force_invalidate((void *)fcs_out_ops_buffer,
+                cache_force_invalidate((void *)fcs_out_ops_buf,
                         (size_t)ecdh_smc_resp[FCS_RESP_SIZE]);
                 /* Ignoring the FCS response header */
                 *shared_sec_size = (uint32_t)ecdh_smc_resp[FCS_RESP_SIZE] -
                         FCS_RESP_HEADER_SIZE;
                 (void)memcpy((void *)shared_sec_data,
-                        (void *)&fcs_out_ops_buffer[FCS_RESP_DATA],
+                        (void *)&fcs_out_ops_buf[FCS_RESP_DATA],
                         *shared_sec_size);
             }
             status = (uint16_t)ecdh_smc_resp[FCS_RESP_STATUS];
@@ -2806,23 +2795,23 @@ int run_fcs_ecdh_request(char *uuid, uint32_t key_id,
     }
     return ret;
 }
-int run_fcs_qspi_open(void)
+int fcs_open_qspi(void)
 {
     int ret;
     uint16_t status;
     uint64_t qspi_open_err = 0UL;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
     }
     DEBUG("QSPI open: No args");
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_QSPI_OPEN, NULL, 0,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_QSPI_OPEN, NULL, 0,
             &qspi_open_err, sizeof(qspi_open_err));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1 %lx", qspi_open_err);
@@ -2832,23 +2821,23 @@ int run_fcs_qspi_open(void)
     }
     return ret;
 }
-int run_fcs_qspi_close(void)
+int fcs_close_qspi(void)
 {
     int ret;
     uint16_t status;
     uint64_t qspi_close_err = 0UL;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
     }
     DEBUG("QSPI close: No args");
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_QSPI_CLOSE, NULL, 0,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_QSPI_CLOSE, NULL, 0,
             &qspi_close_err, sizeof(qspi_close_err));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1 %lx", qspi_close_err);
@@ -2858,12 +2847,12 @@ int run_fcs_qspi_close(void)
     }
     return ret;
 }
-int run_fcs_qspi_set_cs(uint32_t chip_sel_info)
+int fcs_set_qspi_cs(uint32_t chip_sel_info)
 {
     int ret;
     uint16_t status;
     uint64_t qspi_chip_sel_args[3], qspi_chip_sel_err = 0UL;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
@@ -2875,13 +2864,13 @@ int run_fcs_qspi_set_cs(uint32_t chip_sel_info)
             "QSPI chip select: Chip Select: %ld, Combined Address: %ld, Mode: %ld",
             qspi_chip_sel_args[0], qspi_chip_sel_args[1],
             qspi_chip_sel_args[2]);
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_QSPI_CHIP_SELECT,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_QSPI_CHIP_SELECT,
             qspi_chip_sel_args, sizeof(qspi_chip_sel_args), &qspi_chip_sel_err,
             sizeof(qspi_chip_sel_err));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1 %lx", qspi_chip_sel_err);
@@ -2891,7 +2880,7 @@ int run_fcs_qspi_set_cs(uint32_t chip_sel_info)
     }
     return ret;
 }
-int run_fcs_qspi_read(uint32_t qspi_addr, uint32_t data_len, char *buffer)
+int fcs_read_qspi(uint32_t qspi_addr, uint32_t data_len, char *buf)
 {
     int ret;
     uint16_t status;
@@ -2899,7 +2888,7 @@ int run_fcs_qspi_read(uint32_t qspi_addr, uint32_t data_len, char *buffer)
     {
         0
     };
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
@@ -2914,25 +2903,25 @@ int run_fcs_qspi_read(uint32_t qspi_addr, uint32_t data_len, char *buffer)
         ERROR("No size specified");
         return -EINVAL;
     }
-    if (buffer == NULL)
+    if (buf == NULL)
     {
         ERROR("No buffer provided");
         return -EINVAL;
     }
 
     qspi_read_args[0] = qspi_addr;
-    qspi_read_args[1] = (uint64_t)buffer;
+    qspi_read_args[1] = (uint64_t)buf;
     qspi_read_args[2] = (uint64_t)data_len * MBOX_WORD_SIZE;
-    cache_force_invalidate(buffer, data_len * MBOX_WORD_SIZE);
+    cache_force_invalidate(buf, data_len * MBOX_WORD_SIZE);
     DEBUG("QSPI read: QSPI Address: %lx, Size: %ld, Buffer: %lx",
-            qspi_read_args[0], qspi_read_args[2], (uint64_t)buffer);
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_QSPI_READ,
+            qspi_read_args[0], qspi_read_args[2], (uint64_t)buf);
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_QSPI_READ,
             qspi_read_args, sizeof(qspi_read_args), qspi_read_resp,
             sizeof(qspi_read_resp));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1 %lx, x2 %lx", qspi_read_resp[0],
@@ -2941,19 +2930,19 @@ int run_fcs_qspi_read(uint32_t qspi_addr, uint32_t data_len, char *buffer)
             ret = (int)status;
             if (ret == 0)
             {
-                cache_force_invalidate(buffer, qspi_read_resp[FCS_RESP_SIZE]);
+                cache_force_invalidate(buf, qspi_read_resp[FCS_RESP_SIZE]);
                 INFO("Read %ld bytes", qspi_read_resp[FCS_RESP_SIZE]);
             }
         }
     }
     return ret;
 }
-int run_fcs_qspi_write(uint32_t qspi_addr, uint32_t data_len, char *buffer)
+int fcs_write_qspi(uint32_t qspi_addr, uint32_t data_len, char *buf)
 {
     int ret;
     uint16_t status;
     uint64_t qspi_write_args[2], qspi_write_err;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("FCS is not initialised");
         return -EIO;
@@ -2968,7 +2957,7 @@ int run_fcs_qspi_write(uint32_t qspi_addr, uint32_t data_len, char *buffer)
         ERROR("No size specified");
         return -EINVAL;
     }
-    if (buffer == NULL)
+    if (buf == NULL)
     {
         ERROR("No buffer provided");
         return -EINVAL;
@@ -2978,25 +2967,25 @@ int run_fcs_qspi_write(uint32_t qspi_addr, uint32_t data_len, char *buffer)
      * to be written
      */
     /* Formatting the payload */
-    fcs_inp_ops_buffer[0] = qspi_addr;
-    fcs_inp_ops_buffer[1] = data_len;
-    (void)memcpy((void *)&fcs_inp_ops_buffer[2], (void *)buffer, data_len *
+    fcs_in_ops_buf[0] = qspi_addr;
+    fcs_in_ops_buf[1] = data_len;
+    (void)memcpy((void *)&fcs_in_ops_buf[2], (void *)buf, data_len *
             MBOX_WORD_SIZE);
 
-    qspi_write_args[0] = (uint64_t)fcs_inp_ops_buffer;
+    qspi_write_args[0] = (uint64_t)fcs_in_ops_buf;
     /* Adding two to account for the size of the qspi_addr and data_len */
     qspi_write_args[1] = MBOX_WORD_SIZE * ((uint64_t)data_len + 2UL);
-    cache_force_write_back(fcs_inp_ops_buffer, data_len * MBOX_WORD_SIZE);
+    cache_force_write_back(fcs_in_ops_buf, data_len * MBOX_WORD_SIZE);
 
     INFO("QSPI write: Address: %lx, Size: %ld, Buffer: %lx", qspi_write_args[0],
-            qspi_write_args[1], (uint64_t)buffer);
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_QSPI_WRITE,
+            qspi_write_args[1], (uint64_t)buf);
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_QSPI_WRITE,
             qspi_write_args, sizeof(qspi_write_args), &qspi_write_err,
             sizeof(qspi_write_err));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1 %lx", qspi_write_err);
@@ -3006,12 +2995,12 @@ int run_fcs_qspi_write(uint32_t qspi_addr, uint32_t data_len, char *buffer)
     }
     return ret;
 }
-int run_fcs_qspi_erase(uint32_t qspi_addr, uint32_t data_len)
+int fcs_erase_qspi(uint32_t qspi_addr, uint32_t data_len)
 {
     int ret;
     uint16_t status;
     uint64_t qspi_erase_args[2], qspi_erase_err = 0UL;
-    if (fcs_descriptor->security_handle == NULL)
+    if (fcs_desc.security_handle == NULL)
     {
         ERROR("Security driver not initialised");
         return -EIO;
@@ -3032,13 +3021,13 @@ int run_fcs_qspi_erase(uint32_t qspi_addr, uint32_t data_len)
 
     INFO("QSPI erase: Address: %lx, Size: %ld", qspi_erase_args[0],
             qspi_erase_args[1]);
-    ret = sip_svc_send(fcs_descriptor->security_handle, FCS_QSPI_ERASE,
+    ret = sip_svc_send(fcs_desc.security_handle, FCS_QSPI_ERASE,
             qspi_erase_args, sizeof(qspi_erase_args), &qspi_erase_err,
             sizeof(qspi_erase_err));
 
     if (ret == 0)
     {
-        if (osal_semaphore_wait(fcs_descriptor->fcs_sem,
+        if (osal_semaphore_wait(fcs_desc.fcs_sem,
                 OSAL_TIMEOUT_WAIT_FOREVER) == true)
         {
             DEBUG("SIP_SVC response: x1 %lx", qspi_erase_err);
@@ -3052,5 +3041,5 @@ int run_fcs_qspi_erase(uint32_t qspi_addr, uint32_t data_len)
 void fcs_callback(uint64_t *resp_values)
 {
     (void)resp_values;
-    (void)osal_semaphore_post(fcs_descriptor->fcs_sem);
+    (void)osal_semaphore_post(fcs_desc.fcs_sem);
 }

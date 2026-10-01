@@ -8,16 +8,14 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <socfpga_uart.h>
 #include "socfpga_console.h"
 #include "osal.h"
 
-#define RETRY_MAX_COUNT    10
-
 #define CONSOLE_FLAG_TASK_LOOP 0x1
 
-#define MAX_PIPE_SIZE        4096
-#define MAX_INT_BUFF_SIZE    128
+#define CONSOLE_BUF_SIZE     4096
 #define CONSOLE_CFG_MAX_LEN  17
 /*
  * If CONSOLE_DROP_MSG_FMT is changed, update CONSOLE_DROP_MSG_LEN to fit the
@@ -26,6 +24,12 @@
 #define CONSOLE_DROP_MSG_FMT "\r\n[console: %u bytes dropped]\r\n"
 #define CONSOLE_DROP_MSG_LEN 48
 
+/*
+ * If configCONSOLE_MAKE_FLUSH_TASK is set to 0, console data has to be
+ * displayed by calling the console_clear_pending function. This function
+ * can be called in the vApplicationIdleHook only when the macro is
+ * not set.
+ */
 #ifndef configCONSOLE_MAKE_FLUSH_TASK
 #define configCONSOLE_MAKE_FLUSH_TASK 0
 #endif
@@ -33,15 +37,21 @@
 #define configCONSOLE_TASK_FUNCTION console_clear_pending
 #endif
 
-static osal_pipe_t buf_pipe;
-static uint8_t int_buf[MAX_INT_BUFF_SIZE];
+static uint8_t ringbuf[CONSOLE_BUF_SIZE];
+static uint32_t ring_head = 0;
+static uint32_t ring_tail = 0;
+
+/* Intermediate buffer to provide data to UART */
+static uint8_t int_buf[CONSOLE_BUF_SIZE];
 static char drop_msg[CONSOLE_DROP_MSG_LEN];
 static uint32_t dropped_bytes = 0;
-static osal_semaphore_t signal_bytes_available;
 static osal_semaphore_def_t console_write_sem_mem;
 static osal_semaphore_t console_write_sem;
 uart_handle_t hconsole_uart = NULL;
 uart_config_t console_config;
+
+#if configCONSOLE_MAKE_FLUSH_TASK == 1
+static osal_semaphore_t signal_bytes_available;
 
 static void console_flush_task(void *flags)
 {
@@ -57,25 +67,53 @@ static void console_flush_task(void *flags)
     }
     osal_task_delete();
 }
+#endif
 
-/*
- * Defining console_write_complete and console_read_complete just to prevent
- * context switch here
- */
-static void console_write_complete(osal_pipe_t pipe, long is_isr,
-        long *need_ctx_switch)
+static bool console_is_ringbuf_full(void)
 {
-    (void)pipe;
-    (void)is_isr;
-    (void)need_ctx_switch;
+    return ((ring_head + 1) % CONSOLE_BUF_SIZE) == ring_tail;
 }
 
-static void console_read_complete(osal_pipe_t pipe, BaseType_t is_isr,
-        BaseType_t *need_ctx_switch)
+
+static int console_write_ringbuf(const uint8_t *buf, uint32_t length)
 {
-    (void)pipe;
-    (void)is_isr;
-    (void)need_ctx_switch;
+    uint32_t idx;
+
+    if (buf == NULL || length == 0)
+    {
+        return -1;
+    }
+
+    for (idx = 0; idx < length; idx++)
+    {
+        if (console_is_ringbuf_full())
+        {
+            dropped_bytes += (length - idx);
+            break;
+        }
+        ringbuf[ring_head] = buf[idx];
+        ring_head = (ring_head + 1) % CONSOLE_BUF_SIZE;
+    }
+    return 0;
+}
+
+
+static int console_read_ringbuf(uint8_t *buf, uint32_t length)
+{
+    uint32_t bytes_read = 0;
+
+    if (buf == NULL || length == 0)
+    {
+        return -1;
+    }
+
+    while (bytes_read < length && ring_tail != ring_head)
+    {
+        buf[bytes_read] = ringbuf[ring_tail];
+        ring_tail = (ring_tail + 1) % CONSOLE_BUF_SIZE;
+        bytes_read++;
+    }
+    return bytes_read;
 }
 
 int console_init(uint32_t id, const char *config_str)
@@ -193,22 +231,10 @@ int console_init(uint32_t id, const char *config_str)
         return ret;
     }
 
-    buf_pipe = osal_pipe_create(MAX_PIPE_SIZE, console_read_complete,
-            console_write_complete);
-    if (buf_pipe == NULL)
-    {
-        (void)uart_close(hconsole_uart);
-        hconsole_uart = NULL;
-        (void)osal_semaphore_delete(console_write_sem);
-        console_write_sem = NULL;
-        return -ENOMEM;
-    }
-#if configCONSOLE_MAKE_FLUSH_TASK
+#if configCONSOLE_MAKE_FLUSH_TASK == 1
     signal_bytes_available = osal_semaphore_create(NULL);
     if (signal_bytes_available == NULL)
     {
-        (void)osal_pipe_delete(buf_pipe);
-        buf_pipe = NULL;
         (void)uart_close(hconsole_uart);
         hconsole_uart = NULL;
         (void)osal_semaphore_delete(console_write_sem);
@@ -226,21 +252,18 @@ int console_init(uint32_t id, const char *config_str)
         console_write_sem = NULL;
         osal_semaphore_delete(signal_bytes_available);
         signal_bytes_available = NULL;
-        (void)osal_pipe_delete(buf_pipe);
-        buf_pipe = NULL;
         return -ENOMEM;
     }
 #endif
     return 0;
 }
 
-int console_fill_buffer(unsigned char *const buf, int length)
+int console_fill_buf(unsigned char *const buf, int length)
 {
-    int ret;
     int32_t poll_ret;
-    uint32_t k_state = osal_get_kernel_state();
+    uint32_t k_state = OSAL_KERNEL_NOT_STARTED;
 
-    if ((hconsole_uart == NULL) || (buf_pipe == NULL))
+    if ((hconsole_uart == NULL))
     {
         return -EINVAL;
     }
@@ -250,41 +273,36 @@ int console_fill_buffer(unsigned char *const buf, int length)
         return -EINVAL;
     }
 
+    if (xPortIsInsideInterrupt())
+    {
+        if (console_write_ringbuf(buf, length) != 0)
+        {
+            dropped_bytes += length;
+            return -ENOMEM;
+        }
+        return length;
+    }
+
+    k_state = osal_get_kernel_state();
+
     if (k_state == OSAL_KERNEL_NOT_STARTED)
     {
         poll_ret = uart_write_polling(hconsole_uart, buf, length);
         return (poll_ret == 0) ? length : poll_ret;
     }
 
-    if (k_state == OSAL_KERNEL_NOT_RUNNING)
+    if (console_write_ringbuf(buf, length) != 0)
     {
-        /*
-         * As per the current freeRTOS code writing to stream buffer
-         * if there is enough space is fine (Not allowed but the code looks safe)
-         */
-        if (length < osal_pipe_space_available(buf_pipe))
-        {
-            return osal_pipe_send(buf_pipe, buf, length);
-        }
-    }
-    if (buf == NULL || length == 0)
-    {
-        return 0;
+        dropped_bytes += length;
+        return -ENOMEM;
     }
 
-    ret = osal_pipe_send(buf_pipe, buf, length);
-
-    if (ret < length)
-    {
-        dropped_bytes += (uint32_t)(length - ret);
-    }
-
-    return ret;
+    return length;
 }
 
 void console_signal_fill(void)
 {
-#if configCONSOLE_MAKE_FLUSH_TASK
+#if configCONSOLE_MAKE_FLUSH_TASK == 1
     /*
      * If Sem fails, that means the receiver is already waiting
      * We can ignore that case as next pass will correct it
@@ -298,12 +316,12 @@ void console_signal_fill(void)
 
 int console_write(unsigned char *const buf, int length)
 {
-    if ((hconsole_uart == NULL) || (buf_pipe == NULL))
+    if ((hconsole_uart == NULL))
     {
         return -EINVAL;
     }
 
-    int ret = console_fill_buffer(buf, length);
+    int ret = console_fill_buf(buf, length);
     console_signal_fill();
     return ret;
 }
@@ -311,25 +329,24 @@ int console_write(unsigned char *const buf, int length)
 void console_clear_pending(void)
 {
     int bytes_read;
-    uint32_t num_bytesin_pipe;
     uint32_t drops;
     int msg_len;
-#if !configCONSOLE_MAKE_FLUSH_TASK
+#if configCONSOLE_MAKE_FLUSH_TASK == 0
     int32_t console_state;
 #endif
 
-    if ((hconsole_uart == NULL) || (buf_pipe == NULL))
+    if ((hconsole_uart == NULL))
     {
         return;
     }
-    num_bytesin_pipe = osal_pipe_bytes_available(buf_pipe);
-    if (num_bytesin_pipe > 0)
+
+    if (ring_tail != ring_head)
     {
         bytes_read = 0;
         (void)console_lock();
         do {
-#if configCONSOLE_MAKE_FLUSH_TASK
-            bytes_read = osal_pipe_receive(buf_pipe, int_buf, MAX_INT_BUFF_SIZE);
+#if configCONSOLE_MAKE_FLUSH_TASK == 1
+            bytes_read = console_read_ringbuf(int_buf, CONSOLE_BUF_SIZE);
             uart_write_sync(hconsole_uart, int_buf, bytes_read);
 #else
             /*
@@ -342,7 +359,9 @@ void console_clear_pending(void)
             {
                 break;
             }
-            bytes_read = osal_pipe_receive(buf_pipe, int_buf, MAX_INT_BUFF_SIZE);
+
+            bytes_read = console_read_ringbuf(int_buf, CONSOLE_BUF_SIZE);
+
             if (uart_write_polling(hconsole_uart, int_buf, bytes_read) != 0)
             {
                 break;
@@ -360,7 +379,7 @@ void console_clear_pending(void)
                 CONSOLE_DROP_MSG_FMT, (unsigned int)drops);
         if (msg_len > 0)
         {
-#if configCONSOLE_MAKE_FLUSH_TASK
+#if configCONSOLE_MAKE_FLUSH_TASK == 1
             uart_write_sync(hconsole_uart, (uint8_t *)drop_msg, (uint32_t)msg_len);
 #else
             (void)uart_write_polling(hconsole_uart, (uint8_t *)drop_msg, (uint32_t)msg_len);
@@ -403,12 +422,6 @@ int console_unlock(void)
 int console_deinit(void)
 {
     int ret = 0;
-
-    if (buf_pipe != NULL)
-    {
-        (void)osal_pipe_delete(buf_pipe);
-        buf_pipe = NULL;
-    }
 
     if (hconsole_uart != NULL)
     {

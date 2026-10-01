@@ -22,7 +22,7 @@
 #define SPI_SLAVE_NUM_INSTANCES     2U
 #define SPI_MAX_TRANSFER_SIZE       2048U
 #define SPI_FIFO_DEPTH              256U
-#define SPI_RXFTLR_DEFAULT          ((SPI_FIFO_DEPTH * 5U) / 8U)
+#define SPI_RXFTLR_DEFAULT          ((SPI_FIFO_DEPTH * 3U) / 8U)
 /*
  * SPI DMA multi-block (LLI) block size in bytes.
  * Tune this value based on throughput/memory constraints.
@@ -61,6 +61,7 @@ struct spi_handle
     bool is_tx_on;
     uint32_t instance;
     spi_role_t role;
+    uint32_t freq;
     uint32_t base_addr;
     uint32_t slave_id;
     uint32_t tx_size;
@@ -271,7 +272,7 @@ static void spi_dma_callback(void *p_usr_cntxt)
             /* Deassert CS before notifying the application. */
             if (ctx->hspi->role == SPI_ROLE_MASTER)
             {
-                spi_select_chip(ctx->hspi->instance, 0U);
+                spi_ll_select_chip(ctx->hspi->instance, 0U);
             }
 
             ctx->hspi->is_tx_async = false;
@@ -312,7 +313,7 @@ spi_handle_t spi_open(uint32_t instance)
 {
     spi_handle_t handle;
     socfpga_hpu_interrupt_t int_id;
-    socfpga_interrupt_err_t ret;
+    int err;
 
     if (instance >= SPI_MASTER_NUM_INSTANCES)
     {
@@ -330,7 +331,7 @@ spi_handle_t spi_open(uint32_t instance)
     memset(handle, 0, sizeof(struct spi_handle));
     handle->instance = instance;
     handle->role = SPI_ROLE_MASTER;
-    handle->base_addr = spi_get_base_addr(instance, handle->role);
+    handle->base_addr = spi_ll_get_base_addr(instance, handle->role);
 
     handle->mutex = osal_mutex_create(&handle->mutex_mem);
     handle->sem = osal_semaphore_create(&handle->sem_mem);
@@ -342,16 +343,16 @@ spi_handle_t spi_open(uint32_t instance)
     }
 
     int_id = SPI_GET_INT_ID_MASTER(instance);
-    ret = interrupt_register_isr(int_id, spi_isr, handle);
-    if (ret != ERR_OK)
+    err = interrupt_register_isr(int_id, spi_isr, handle);
+    if (err != 0)
     {
         osal_mutex_delete(handle->mutex);
         osal_semaphore_delete(handle->sem);
         ERROR("Failed to register SPI interrupt");
         return NULL;
     }
-    ret = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_SPI);
-    if (ret != ERR_OK)
+    err = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_SPI);
+    if (err != 0)
     {
         osal_mutex_delete(handle->mutex);
         osal_semaphore_delete(handle->sem);
@@ -359,9 +360,9 @@ spi_handle_t spi_open(uint32_t instance)
         return NULL;
     }
 
-    spi_init(instance, handle->role);
+    spi_ll_init(instance, handle->role);
 
-    spi_disable_interrupt(handle->base_addr, SPI_ALL_INTERRUPTS);
+    spi_ll_disable_interrupt(handle->base_addr, SPI_ALL_INTERRUPTS);
 
     handle->is_open = true;
 
@@ -372,7 +373,7 @@ spi_handle_t spi_slave_open(uint32_t instance)
 {
     spi_handle_t handle;
     socfpga_hpu_interrupt_t int_id;
-    socfpga_interrupt_err_t ret;
+    int err;
 
     if (instance >= SPI_SLAVE_NUM_INSTANCES)
     {
@@ -390,7 +391,7 @@ spi_handle_t spi_slave_open(uint32_t instance)
     memset(handle, 0, sizeof(struct spi_handle));
     handle->instance = instance;
     handle->role = SPI_ROLE_SLAVE;
-    handle->base_addr = spi_get_base_addr(instance, handle->role);
+    handle->base_addr = spi_ll_get_base_addr(instance, handle->role);
 
     handle->mutex = osal_mutex_create(&handle->mutex_mem);
     handle->sem = osal_semaphore_create(&handle->sem_mem);
@@ -402,16 +403,16 @@ spi_handle_t spi_slave_open(uint32_t instance)
     }
 
     int_id = SPI_GET_INT_ID_SLAVE(instance);
-    ret = interrupt_register_isr(int_id, spi_isr, handle);
-    if (ret != ERR_OK)
+    err = interrupt_register_isr(int_id, spi_isr, handle);
+    if (err != 0)
     {
         osal_mutex_delete(handle->mutex);
         osal_semaphore_delete(handle->sem);
         ERROR("Failed to register SPI interrupt");
         return NULL;
     }
-    ret = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_SPI);
-    if (ret != ERR_OK)
+    err = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_SPI);
+    if (err != 0)
     {
         osal_mutex_delete(handle->mutex);
         osal_semaphore_delete(handle->sem);
@@ -419,10 +420,10 @@ spi_handle_t spi_slave_open(uint32_t instance)
         return NULL;
     }
 
-    spi_init(instance, handle->role);
+    spi_ll_init(instance, handle->role);
 
-    spi_disable_interrupt(handle->base_addr, SPI_ALL_INTERRUPTS);
-    spi_enable_interrupt(handle->base_addr, SPI_RX_OVERFLOW_INT);
+    spi_ll_disable_interrupt(handle->base_addr, SPI_ALL_INTERRUPTS);
+    spi_ll_enable_interrupt(handle->base_addr, SPI_RX_OVERFLOW_INT);
 
     handle->is_open = true;
 
@@ -456,12 +457,13 @@ int32_t spi_set_callback(spi_handle_t const hspi,
     return 0;
 }
 
-int32_t spi_ioctl(spi_handle_t const hspi, spi_ioctl_t cmd, void *const buf)
+int32_t spi_ioctl(spi_handle_t const hspi, spi_ioctl_t cmd, void *const param)
 {
     spi_cfg_t config =
     {
         0
     };
+    uint32_t delay = 0;
     int32_t result = 0;
 
     if (spi_is_handle_valid(hspi) == false)
@@ -484,55 +486,55 @@ int32_t spi_ioctl(spi_handle_t const hspi, spi_ioctl_t cmd, void *const buf)
             ERROR("SPI bus is busy");
             return -EBUSY;
         }
-        if (buf == NULL)
+        if (param == NULL)
         {
             ERROR("Buffer cannot be NULL");
             return -EINVAL;
         }
 
-        spi_disable(hspi->base_addr);
+        spi_ll_disable(hspi->base_addr);
         /* Keep SSI disabled if configuration fails. */
-        result = spi_set_config(hspi->base_addr,
-                ((spi_cfg_t *)buf)->clk,
-                ((spi_cfg_t *)buf)->mode);
+        result = spi_ll_set_config(hspi->base_addr,
+                ((spi_cfg_t *)param)->clk,
+                ((spi_cfg_t *)param)->mode);
         if (result != 0)
         {
             return result;
         }
-        spi_set_transfermode(hspi->base_addr, SPI_TX_RX_MOD);
-        spi_enable(hspi->base_addr);
+        spi_ll_set_transfermode(hspi->base_addr, SPI_TX_RX_MOD);
+        spi_ll_enable(hspi->base_addr);
         break;
 
     case SPI_GET_CONFIG:
-        if (buf == NULL)
+        if (param == NULL)
         {
             ERROR("Buffer cannot be NULL");
             result = -EINVAL;
             break;
         }
-        spi_get_config(hspi->base_addr, &config.clk, &config.mode);
+        spi_ll_get_config(hspi->base_addr, &config.clk, &config.mode);
         config.role = hspi->role;
-        *(spi_cfg_t *)buf = config;
+        *(spi_cfg_t *)param = config;
         break;
 
     case SPI_GET_TX_NBYTES:
-        if (buf == NULL)
+        if (param == NULL)
         {
             ERROR("Buffer cannot be NULL");
             result = -EINVAL;
             break;
         }
-        *(uint32_t *)buf = hspi->tx_size - hspi->tx_bytes_left;
+        *(uint32_t *)param = hspi->tx_size - hspi->tx_bytes_left;
         break;
 
     case SPI_GET_RX_NBYTES:
-        if (buf == NULL)
+        if (param == NULL)
         {
             ERROR("Buffer cannot be NULL");
             result = -EINVAL;
             break;
         }
-        *(uint32_t *)buf = hspi->rx_size - hspi->rx_bytes_left;
+        *(uint32_t *)param = hspi->rx_size - hspi->rx_bytes_left;
         break;
 
     case SPI_ENABLE_DMA:
@@ -546,12 +548,12 @@ int32_t spi_ioctl(spi_handle_t const hspi, spi_ioctl_t cmd, void *const buf)
             ERROR("SPI DMA is already enabled");
             return -EBUSY;
         }
-        if (buf == NULL)
+        if (param == NULL)
         {
             ERROR("Config cannot be NULL");
             return -EINVAL;
         }
-        if (spi_dma_init(hspi, (spi_dma_config_t *)buf) != 0)
+        if (spi_dma_init(hspi, (spi_dma_config_t *)param) != 0)
         {
             ERROR("SPI DMA init failed");
             return -EIO;
@@ -575,6 +577,33 @@ int32_t spi_ioctl(spi_handle_t const hspi, spi_ioctl_t cmd, void *const buf)
         {
             ERROR("SPI DMA deinit failed");
             return -EIO;
+        }
+        break;
+
+    case SPI_SET_RX_SAMPLING_DELAY:
+        if (hspi->is_tx_busy || hspi->is_rx_busy)
+        {
+            ERROR("SPI bus is busy");
+            return -EBUSY;
+        }
+        if (hspi->role != SPI_ROLE_MASTER)
+        {
+            ERROR("RX sample delay is supported only in master mode");
+            return -ENOTSUP;
+        }
+        if (param == NULL)
+        {
+            ERROR("Buffer cannot be NULL");
+            return -EINVAL;
+        }
+
+        delay = *(uint32_t *)param;
+        spi_ll_disable(hspi->base_addr);
+        result = spi_ll_set_rx_sampling_delay(hspi->base_addr, delay);
+        spi_ll_enable(hspi->base_addr);
+        if (result != 0)
+        {
+            ERROR("Failed to set RX sample delay");
         }
         break;
 
@@ -658,60 +687,74 @@ static int32_t spi_dma_deinit(spi_handle_t hspi)
 static void spi_xfer(spi_handle_t hspi, uint32_t nbytes)
 {
     uint32_t mode;
-    uint32_t thr = SPI_RXFTLR_DEFAULT;
+    uint32_t rx_thr = SPI_RXFTLR_DEFAULT;
+    uint32_t prefill_size;
+    uint32_t prefill_written;
 
-    hspi->tx_bytes_left = hspi->is_tx_on ? nbytes : 0U;
-    hspi->rx_bytes_left = nbytes;
+    hspi->tx_bytes_left = (hspi->is_tx_on == true) ? nbytes : 0U;
+    hspi->rx_bytes_left = (hspi->is_rx_on == true) ? nbytes : 0U;
 
-    if (hspi->role == SPI_ROLE_SLAVE)
+    /* Selecting mode of SPI transmission (EEPROM mode not implemented) */
+    if ((hspi->is_tx_on == true) && (hspi->is_rx_on == true))
     {
-        if ((hspi->is_tx_on == true) && (hspi->is_rx_on == true))
-        {
-            mode = SPI_TX_RX_MOD;
-        }
-        else if (hspi->is_tx_on == true)
-        {
-            mode = SPI_TX_MOD;
-        }
-        else
-        {
-            mode = SPI_RX_MOD;
-        }
-
-        spi_set_transfermode(hspi->base_addr, mode);
-        spi_set_slave_output(hspi->base_addr, hspi->is_tx_on);
-
-        /*
-         * Set RXFTLR so RXFIS fires before FIFO is full
-         * Use a depth-based default and lower it as we near completion
-         */
-        if (hspi->is_rx_on == true)
-        {
-            if (nbytes <= thr)
-            {
-                thr = (uint32_t)nbytes - 1U;
-            }
-
-            if (thr > (SPI_FIFO_DEPTH - 1U))
-            {
-                thr = SPI_FIFO_DEPTH - 1U;
-            }
-
-            hspi->rx_threshold = (uint8_t)thr;
-            spi_ll_set_rx_threshold(hspi->base_addr, hspi->rx_threshold);
-        }
+        mode = SPI_TX_RX_MOD;
+    }
+    else if ((hspi->is_tx_on == true) && (hspi->is_rx_on == false))
+    {
+        mode = SPI_TX_MOD;
+    }
+    else if ((hspi->is_tx_on == false) && (hspi->is_rx_on == true))
+    {
+        mode = SPI_RX_MOD;
+    }
+    else
+    {
+        ERROR("Invalid mode configured");
     }
 
-    spi_enable_interrupt(hspi->base_addr, SPI_RX_FULL_INT);
+    spi_ll_set_transfermode(hspi->base_addr, mode);
+
+    if (hspi->rx_bytes_left > 0U)
+    {
+        if (nbytes <= rx_thr)
+        {
+            rx_thr = (uint32_t)nbytes - 1U;
+        }
+
+        if (rx_thr > (SPI_FIFO_DEPTH - 1U))
+        {
+                rx_thr = SPI_FIFO_DEPTH - 1U;
+        }
+
+        hspi->rx_threshold = (uint8_t)rx_thr;
+        spi_ll_set_rx_threshold(hspi->base_addr, hspi->rx_threshold);
+        spi_ll_enable_interrupt(hspi->base_addr, SPI_RX_FULL_INT);
+    }
 
     if (hspi->role == SPI_ROLE_MASTER)
     {
-        spi_select_chip(hspi->instance, hspi->slave_id);
+        spi_ll_select_chip(hspi->instance, hspi->slave_id);
     }
 
-    if (hspi->is_tx_on == true)
+    if (hspi->role == SPI_ROLE_SLAVE)
     {
-        spi_enable_interrupt(hspi->base_addr, SPI_TX_EMPTY_INT);
+        spi_ll_set_slave_output(hspi->base_addr, hspi->is_tx_on);
+    }
+
+
+    if (hspi->tx_bytes_left > 0U)
+    {
+        if (hspi->role == SPI_ROLE_SLAVE)
+        {
+            prefill_size = (hspi->tx_bytes_left <= SPI_FIFO_DEPTH)
+                            ? hspi->tx_bytes_left : SPI_FIFO_DEPTH;
+            prefill_written = spi_ll_write_fifo(hspi->base_addr,
+                                             hspi->tx_buf, prefill_size);
+            hspi->tx_bytes_left -= prefill_written;
+            hspi->tx_buf += prefill_written;
+        }
+
+        spi_ll_enable_interrupt(hspi->base_addr, SPI_TX_EMPTY_INT);
     }
 }
 
@@ -767,10 +810,10 @@ static int32_t spi_dma_transfer(spi_handle_t const hspi, void *const txbuf,
         rx_dst = (uint8_t *)rxbuf;
     }
 
-    spi_disable_interrupt(hspi->base_addr, SPI_ALL_INTERRUPTS);
+    spi_ll_disable_interrupt(hspi->base_addr, SPI_ALL_INTERRUPTS);
     if (hspi->role == SPI_ROLE_SLAVE)
     {
-        spi_enable_interrupt(hspi->base_addr, SPI_RX_OVERFLOW_INT);
+        spi_ll_enable_interrupt(hspi->base_addr, SPI_RX_OVERFLOW_INT);
     }
 
     /*
@@ -792,12 +835,12 @@ static int32_t spi_dma_transfer(spi_handle_t const hspi, void *const txbuf,
         {
             mode = SPI_RX_MOD;
         }
-        spi_set_transfermode(hspi->base_addr, mode);
-        spi_set_slave_output(hspi->base_addr, (txbuf != NULL));
+        spi_ll_set_transfermode(hspi->base_addr, mode);
+        spi_ll_set_slave_output(hspi->base_addr, (txbuf != NULL));
     }
     else
     {
-        spi_set_transfermode(hspi->base_addr, SPI_TX_RX_MOD);
+        spi_ll_set_transfermode(hspi->base_addr, SPI_TX_RX_MOD);
     }
 
     /* DMA TX uses uint32_t[nbytes] where the low byte is the SPI byte. */
@@ -888,7 +931,7 @@ static int32_t spi_dma_transfer(spi_handle_t const hspi, void *const txbuf,
 
     if (hspi->role == SPI_ROLE_MASTER)
     {
-        spi_select_chip(hspi->instance, hspi->slave_id);
+        spi_ll_select_chip(hspi->instance, hspi->slave_id);
     }
 
     if (start_rx_dma)
@@ -898,7 +941,7 @@ static int32_t spi_dma_transfer(spi_handle_t const hspi, void *const txbuf,
             ERROR("SPI RX DMA start failed");
             if (hspi->role == SPI_ROLE_MASTER)
             {
-                spi_select_chip(hspi->instance, 0U);
+                spi_ll_select_chip(hspi->instance, 0U);
             }
             spi_dma_close_channels((spi_handle_t)hspi);
             spi_ll_disable_dma(hspi->base_addr);
@@ -914,7 +957,7 @@ static int32_t spi_dma_transfer(spi_handle_t const hspi, void *const txbuf,
             ERROR("SPI TX DMA start failed");
             if (hspi->role == SPI_ROLE_MASTER)
             {
-                spi_select_chip(hspi->instance, 0U);
+                spi_ll_select_chip(hspi->instance, 0U);
             }
             spi_dma_close_channels((spi_handle_t)hspi);
             spi_ll_disable_dma(hspi->base_addr);
@@ -939,8 +982,6 @@ int32_t spi_xfer_sync(spi_handle_t const hspi,
         return -EINVAL;
     }
 
-    /* Caller is responsible for DMA buffer alignment. */
-
     if (osal_mutex_lock(hspi->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
         if (hspi->is_open == false)
@@ -963,16 +1004,10 @@ int32_t spi_xfer_sync(spi_handle_t const hspi,
             ERROR("SPI bus is busy");
             return -EBUSY;
         }
+
         hspi->is_tx_busy = true;
-        hspi->is_tx_async = false;
-        hspi->is_tx_on = (txbuf != NULL);
-        hspi->is_rx_on = false;
-        if (rxbuf != NULL)
-        {
-            hspi->is_rx_busy = true;
-            hspi->is_rx_async = false;
-            hspi->is_rx_on = true;
-        }
+        hspi->is_rx_busy = true;
+
         if (osal_mutex_unlock(hspi->mutex) == false)
         {
             ERROR("Failed to unlock mutex");
@@ -981,34 +1016,32 @@ int32_t spi_xfer_sync(spi_handle_t const hspi,
     }
 
     hspi->tx_buf = (uint8_t *)txbuf;
-    hspi->tx_size = (txbuf != NULL) ? nbytes : 0U;
-    hspi->rx_size = 0U;
-    if (rxbuf != NULL)
+    hspi->rx_buf = (uint8_t *)rxbuf;
+    hspi->is_tx_async = false;
+    hspi->is_rx_async = false;
+    hspi->tx_size = (txbuf == NULL) ? 0U : nbytes;
+    hspi->rx_size = (rxbuf == NULL) ? 0U : nbytes;
+
+    if (hspi->role == SPI_ROLE_MASTER)
     {
-        hspi->rx_buf = (uint8_t *)rxbuf;
-        hspi->rx_size = nbytes;
+        hspi->is_tx_busy = true;
+        hspi->is_tx_on = true;
+
+        hspi->is_rx_busy = true;
+        hspi->is_rx_on = true;
+    }
+    else
+    {
+        hspi->is_tx_busy = (txbuf != NULL) ? true : false;
+        hspi->is_tx_on = (txbuf != NULL) ? true : false;
+
+        hspi->is_rx_busy = (rxbuf != NULL) ? true : false;
+        hspi->is_rx_on = (rxbuf != NULL) ? true : false;
     }
 
     INFO("Starting SPI transfer in sync mode for %u bytes", nbytes);
-    if (hspi->dma_enabled == false)
-    {
-        if (hspi->role == SPI_ROLE_MASTER)
-        {
-            spi_set_transfermode(hspi->base_addr, SPI_TX_RX_MOD);
-        }
-        spi_xfer(hspi, nbytes);
-        ret = osal_semaphore_wait(hspi->sem, OSAL_TIMEOUT_WAIT_FOREVER);
 
-        if (ret == true)
-        {
-            hspi->is_tx_busy = false;
-            if (rxbuf != NULL)
-            {
-                hspi->is_rx_busy = false;
-            }
-        }
-    }
-    else
+    if (hspi->dma_enabled == true)
     {
         if ((hspi->h_dma_tx == NULL) || (hspi->h_dma_rx == NULL))
         {
@@ -1056,12 +1089,23 @@ int32_t spi_xfer_sync(spi_handle_t const hspi,
         }
         if (hspi->role == SPI_ROLE_MASTER)
         {
-            spi_select_chip(hspi->instance, 0U);
+            spi_ll_select_chip(hspi->instance, 0U);
         }
         hspi->tx_bytes_left = 0U;
         hspi->rx_bytes_left = 0U;
         hspi->is_tx_busy = false;
         hspi->is_rx_busy = false;
+    }
+    else
+    {
+        spi_xfer(hspi, nbytes);
+        ret = osal_semaphore_wait(hspi->sem, OSAL_TIMEOUT_WAIT_FOREVER);
+
+        if (ret == true)
+        {
+            hspi->is_tx_busy = false;
+            hspi->is_rx_busy = false;
+        }
     }
 
     INFO("Completed SPI transfer in sync mode. "
@@ -1082,8 +1126,6 @@ int32_t spi_xfer_async(spi_handle_t const hspi,
         ERROR("Invalid SPI handle or buffer");
         return -EINVAL;
     }
-
-    /* Caller is responsible for DMA buffer alignment. */
 
     if (osal_mutex_lock(hspi->mutex, OSAL_TIMEOUT_WAIT_FOREVER))
     {
@@ -1107,29 +1149,37 @@ int32_t spi_xfer_async(spi_handle_t const hspi,
             ERROR("SPI bus is busy");
             return -EBUSY;
         }
+
         hspi->is_tx_busy = true;
-        hspi->is_tx_async = true;
-        hspi->is_tx_on = (txbuf != NULL);
-        hspi->is_rx_on = false;
-        if (rxbuf != NULL)
-        {
-            hspi->is_rx_busy = true;
-            hspi->is_rx_async = true;
-            hspi->is_rx_on = true;
-        }
+        hspi->is_rx_busy = true;
+
         if (osal_mutex_unlock(hspi->mutex) == false)
         {
             return -EIO;
         }
     }
-
     hspi->tx_buf = (uint8_t *)txbuf;
-    hspi->tx_size = (txbuf != NULL) ? nbytes : 0U;
-    hspi->rx_size = 0U;
-    if (rxbuf != NULL)
+    hspi->rx_buf = (uint8_t *)rxbuf;
+    hspi->is_tx_async = true;
+    hspi->is_rx_async = true;
+    hspi->tx_size = (txbuf == NULL) ? 0U : nbytes;
+    hspi->rx_size = (rxbuf == NULL) ? 0U : nbytes;
+
+    if (hspi->role == SPI_ROLE_MASTER)
     {
-        hspi->rx_buf = (uint8_t *)rxbuf;
-        hspi->rx_size = nbytes;
+        hspi->is_tx_busy = true;
+        hspi->is_tx_on = true;
+
+        hspi->is_rx_busy = true;
+        hspi->is_rx_on = true;
+    }
+    else
+    {
+        hspi->is_tx_busy = (txbuf != NULL) ? true : false;
+        hspi->is_tx_on = (txbuf != NULL) ? true : false;
+
+        hspi->is_rx_busy = (rxbuf != NULL) ? true : false;
+        hspi->is_rx_on = (rxbuf != NULL) ? true : false;
     }
 
     INFO("Starting SPI transfer in async mode for %u bytes", nbytes);
@@ -1167,10 +1217,6 @@ int32_t spi_xfer_async(spi_handle_t const hspi,
     }
     else
     {
-        if (hspi->role == SPI_ROLE_MASTER)
-        {
-            spi_set_transfermode(hspi->base_addr, SPI_TX_RX_MOD);
-        }
         spi_xfer(hspi, nbytes);
     }
 
@@ -1236,7 +1282,7 @@ int32_t spi_cancel(spi_handle_t const hspi)
         spi_drain_fifo(hspi);
     }
 
-    spi_disable(hspi->base_addr);
+    spi_ll_disable(hspi->base_addr);
 
     if (hspi->dma_enabled == true)
     {
@@ -1275,7 +1321,7 @@ int32_t spi_cancel(spi_handle_t const hspi)
         hspi->rx_bytes_left = 0U;
     }
 
-    spi_enable(hspi->base_addr);
+    spi_ll_enable(hspi->base_addr);
 
     return 0;
 }
@@ -1330,7 +1376,7 @@ static void spi_drain_fifo(spi_handle_t hspi)
         remaining = hspi->rx_size - dma_done;
         if (remaining > 0U)
         {
-            fifo_done = spi_read_fifo(hspi->base_addr,
+            fifo_done = spi_ll_read_fifo(hspi->base_addr,
                     &hspi->rx_buf[dma_done], remaining);
         }
 
@@ -1347,7 +1393,7 @@ static void spi_drain_fifo(spi_handle_t hspi)
     }
     else
     {
-        fifo_done = spi_read_fifo(hspi->base_addr,
+        fifo_done = spi_ll_read_fifo(hspi->base_addr,
                 hspi->rx_buf, hspi->rx_bytes_left);
 
         if (fifo_done >= hspi->rx_bytes_left)
@@ -1388,7 +1434,7 @@ int32_t spi_close(spi_handle_t const hspi)
     osal_mutex_delete(hspi->mutex);
     osal_semaphore_delete(hspi->sem);
     hspi->is_open = false;
-    spi_deinit(hspi->instance, hspi->role);
+    spi_ll_deinit(hspi->instance, hspi->role);
 
     return 0;
 }
@@ -1398,130 +1444,108 @@ int32_t spi_close(spi_handle_t const hspi)
  */
 void spi_isr(void *param)
 {
-    spi_handle_t hspi;
+    spi_handle_t hspi = (spi_handle_t)param;
     uint32_t id;
     uint32_t rx_byte_count;
     uint32_t tx_byte_count;
     uint32_t new_thr;
+    bool is_done = false;
+    bool is_error = false;
+    bool is_async = false;
 
-    hspi = (spi_handle_t)param;
     if (hspi == NULL)
     {
         return;
     }
 
-    id = spi_get_interrupt_status(hspi->base_addr);
+    id = spi_ll_get_interrupt_status(hspi->base_addr);
 
     if ((id & SPI_RX_OVERFLOW_INT) != 0U)
     {
-        spi_clear_rx_overflow(hspi->base_addr);
+        spi_ll_clear_rx_overflow(hspi->base_addr);
+        (void)spi_ll_read_fifo(hspi->base_addr, NULL, SPI_FIFO_DEPTH);
 
-
-        /*
-         * If no transfer is active the FIFO holds stale bytes from the
-         * overflowing transaction.  Drain them so the next armed transfer
-         * starts against a clean FIFO.
-         */
-
-        if (!hspi->is_rx_busy)
-        {
-            (void)spi_read_fifo(hspi->base_addr, NULL, SPI_FIFO_DEPTH);
-        }
-
-        if (hspi->callback_fn != NULL)
-        {
-            hspi->callback_fn(SPI_RX_OVERFLOW, hspi->cb_user_context);
-        }
+        is_error = true;
+        is_done = true;
     }
 
-
-    if ((id & SPI_RX_FULL_INT) != 0U)
+    if ((!is_error) && ((id & SPI_RX_FULL_INT) != 0U))
     {
+        if (hspi->is_rx_on == true)
+        {
+            rx_byte_count = spi_ll_read_fifo(hspi->base_addr,
+                    hspi->rx_buf, hspi->rx_bytes_left);
+            hspi->rx_bytes_left -= rx_byte_count;
+            hspi->rx_buf += rx_byte_count;
+        }
+
         if (hspi->rx_bytes_left > 0U)
         {
-            if (hspi->is_rx_on == true)
+            new_thr = (uint32_t)hspi->rx_bytes_left - 1U;
+            if (new_thr > SPI_RXFTLR_DEFAULT)
             {
-                rx_byte_count = spi_read_fifo(hspi->base_addr,
-                        hspi->rx_buf, hspi->rx_bytes_left);
-                hspi->rx_bytes_left -= rx_byte_count;
-                hspi->rx_buf += rx_byte_count;
+                new_thr = SPI_RXFTLR_DEFAULT;
             }
-            else
+            if (new_thr < (uint32_t)hspi->rx_threshold)
             {
-                rx_byte_count = spi_read_fifo(hspi->base_addr, NULL,
-                        hspi->rx_bytes_left);
-                hspi->rx_bytes_left -= rx_byte_count;
-            }
-
-            if (hspi->role == SPI_ROLE_SLAVE)
-            {
-                if (hspi->rx_bytes_left > 0U)
-                {
-                    new_thr = (uint32_t)hspi->rx_bytes_left - 1U;
-
-                    if (new_thr > (SPI_FIFO_DEPTH - 1U))
-                    {
-                        new_thr = SPI_FIFO_DEPTH - 1U;
-                    }
-
-                    if (new_thr < (uint32_t)hspi->rx_threshold)
-                    {
-                        hspi->rx_threshold = (uint8_t)new_thr;
-                        spi_ll_set_rx_threshold(hspi->base_addr,
-                                hspi->rx_threshold);
-                    }
-                }
+                hspi->rx_threshold = (uint8_t)new_thr;
+                spi_ll_set_rx_threshold(hspi->base_addr, hspi->rx_threshold);
             }
         }
 
         if (hspi->rx_bytes_left == 0U)
         {
-            spi_disable_interrupt(hspi->base_addr, SPI_RX_FULL_INT);
-            if (hspi->role == SPI_ROLE_MASTER)
-            {
-                spi_select_chip(hspi->instance, 0U);
-            }
-
-            if ((hspi->is_rx_async == true) || (hspi->is_tx_async == true))
-            {
-                hspi->is_tx_async = false;
-                hspi->is_rx_async = false;
-                hspi->is_tx_busy = false;
-                hspi->is_rx_busy = false;
-
-                if (hspi->callback_fn != NULL)
-                {
-                    hspi->callback_fn(SPI_SUCCESS, hspi->cb_user_context);
-                }
-            }
-            else
-            {
-                (void)osal_semaphore_post(hspi->sem);
-            }
+            hspi->is_rx_on = false;
+            spi_ll_disable_interrupt(hspi->base_addr, SPI_RX_FULL_INT);
         }
     }
 
-    if ((id & SPI_TX_EMPTY_INT) != 0U)
+    if ((!is_error) && ((id & SPI_TX_EMPTY_INT) != 0U))
     {
-        if (hspi->tx_bytes_left > 0U)
+        if (hspi->is_tx_on == true)
         {
-            if (hspi->is_tx_on == true)
+            tx_byte_count = spi_ll_write_fifo(hspi->base_addr,
+                    hspi->tx_buf, hspi->tx_bytes_left);
+            hspi->tx_bytes_left -= tx_byte_count;
+            hspi->tx_buf += tx_byte_count;
+        }
+
+        if (hspi->tx_bytes_left == 0U)
+        {
+            hspi->is_tx_on = false;
+            spi_ll_disable_interrupt(hspi->base_addr, SPI_TX_EMPTY_INT);
+        }
+    }
+
+    if ((!is_error) && (hspi->tx_bytes_left == 0U) && (hspi->rx_bytes_left == 0U))
+    {
+        is_done = true;
+    }
+
+    if (is_done)
+    {
+        if (hspi->role == SPI_ROLE_MASTER)
+        {
+            spi_ll_select_chip(hspi->instance, 0U);
+        }
+
+        is_async = (hspi->is_rx_async || hspi->is_tx_async);
+
+        hspi->is_tx_async = false;
+        hspi->is_rx_async = false;
+        hspi->is_tx_busy = false;
+        hspi->is_rx_busy = false;
+
+        if (is_async)
+        {
+            if (hspi->callback_fn != NULL)
             {
-                tx_byte_count = spi_write_fifo(hspi->base_addr,
-                        hspi->tx_buf, hspi->tx_bytes_left);
-                hspi->tx_bytes_left -= tx_byte_count;
-                hspi->tx_buf += tx_byte_count;
-            }
-            else
-            {
-                tx_byte_count = spi_write_fifo(hspi->base_addr, NULL,
-                        hspi->tx_bytes_left);
-                hspi->tx_bytes_left -= tx_byte_count;
+                hspi->callback_fn(is_error ? SPI_RX_OVERFLOW : SPI_SUCCESS, hspi->cb_user_context);
             }
         }
         else
         {
-            spi_disable_interrupt(hspi->base_addr, SPI_TX_EMPTY_INT);
+            (void)osal_semaphore_post(hspi->sem);
         }
     }
 }

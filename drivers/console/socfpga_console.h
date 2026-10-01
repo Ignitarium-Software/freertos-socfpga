@@ -56,7 +56,7 @@ int console_read(unsigned char *const buf, int length);
  *
  * @return Number of bytes copied on success, -errno on failure.
  */
-int console_fill_buffer(unsigned char *const buf, int length);
+int console_fill_buf(unsigned char *const buf, int length);
 
 /**
  * @brief Signal that the console buffer has been filled.

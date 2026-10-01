@@ -164,7 +164,7 @@ int fcs_deinit(void);
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_open_service_session(char *uuid);
+int fcs_open_session(char *uuid);
 
 /**
  * @brief   Close the cryptographic session and its mailbox client
@@ -175,7 +175,7 @@ int run_fcs_open_service_session(char *uuid);
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_close_service_session(char *uuid);
+int fcs_close_session(char *uuid);
 
 /**
  * @brief Generate a random number using the FCS service.
@@ -195,8 +195,122 @@ int run_fcs_close_service_session(char *uuid);
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_random_number_ext(char *rand_buf, char *uuid, uint32_t context_id,
+int fcs_random_number(char *rand_buf, char *uuid, uint32_t context_id,
         uint32_t rand_size);
+
+/**
+ * @brief Initialize streaming digest operation.
+ *
+ * @param[in] uuid       The session ID associated with the FCS service.
+ * @param[in] context_id The context ID for the digest operation.
+ * @param[in] key_id     The ID of the key to be used for the operation.
+ * @param[in] op_mode    The SHA operation mode (e.g., SHA-256, SHA-384).
+ * @param[in] dig_size   The size of the digest to compute.
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_get_digest_init(char *uuid, uint32_t context_id, uint32_t key_id,
+        uint32_t op_mode, uint32_t dig_size);
+
+/**
+ * @brief Update/finalize streaming digest operation.
+ *
+ * @param[in]  uuid        The session ID associated with the FCS service.
+ * @param[in]  context_id  The context ID for the digest operation.
+ * @param[in]  src_data    Pointer to the source data.
+ * @param[in]  src_size    Length of the source data.
+ * @param[out] digest_data Pointer to the buffer where the computed digest will be stored.
+ * @param[out] digest_size Pointer to an integer to store the length of the computed digest.
+ * @param[in]  final       Set to 1 to finalize the operation.
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_get_digest_update(char *uuid, uint32_t context_id,
+        char *src_data, uint32_t src_size,
+        char *digest_data, uint32_t *digest_size,
+        uint8_t final);
+
+/**
+ * @brief Initialize streaming MAC verify operation.
+ *
+ * @param[in] uuid       The session ID associated with the FCS service.
+ * @param[in] context_id The context ID for the MAC verification operation.
+ * @param[in] key_id     The ID of the key to be used for the operation.
+ * @param[in] dig_size   The size of the digest to verify.
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_mac_verify_init(char *uuid, uint32_t context_id,
+        uint32_t key_id, uint32_t dig_size);
+
+/**
+ * @brief Update/finalize streaming MAC verify operation.
+ *
+ * @param[in]  uuid        The session ID associated with the FCS service.
+ * @param[in]  context_id  The context ID for the MAC verification operation.
+ * @param[in]  src_addr    Pointer to the source data.
+ * @param[in]  src_size    Length of the source data.
+ * @param[in]  mac_data    Pointer to the MAC data to verify.
+ * @param[in]  mac_data_size Length of the MAC data.
+ * @param[out] dest_data   Pointer to the buffer where the verification result will be stored.
+ * @param[out] dest_size   Pointer to an integer to store the size of the verification result.
+ * @param[in]  final       Set to 1 to finalize the operation.
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_mac_verify_update(char *uuid, uint32_t context_id,
+        char *src_addr, uint32_t src_size,
+        char *mac_data, uint32_t mac_data_size,
+        char *dest_data, uint32_t *dest_size,
+        uint8_t final);
+
+/**
+ * @brief Initialize ECDSA SHA2 data sign streaming operation.
+ *
+ * @param[in] uuid       The session ID associated with the FCS service.
+ * @param[in] context_id The context ID for the ECDSA operation.
+ * @param[in] key_id     The ID of the key to be used for signing.
+ * @param[in] ecc_algo   The ECC algorithm to use (e.g., NISTP-256, NISTP-384).
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_ecdsa_sha2_data_sign_init(char *uuid, uint32_t context_id,
+        uint32_t key_id, uint32_t ecc_algo);
+
+/**
+ * @brief Update/finalize ECDSA SHA2 data sign streaming operation.
+ *
+ * @param[in]  uuid        The session ID associated with the FCS service.
+ * @param[in]  context_id  The context ID for the ECDSA operation.
+ * @param[in]  src_addr    Pointer to the source data to be signed.
+ * @param[in]  src_size    Length of the source data.
+ * @param[out] dest_data   Pointer to the buffer where the signed data will be stored.
+ * @param[out] dest_size   Pointer to an integer to store the size of the signed data.
+ * @param[in]  final       Set to 1 to finalize the operation.
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_ecdsa_sha2_data_sign_update(char *uuid, uint32_t context_id,
+        char *src_addr, uint32_t src_size,
+        char *dest_data, uint32_t *dest_size, uint8_t final);
 
 
 /**
@@ -215,7 +329,7 @@ int run_fcs_random_number_ext(char *rand_buf, char *uuid, uint32_t context_id,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_import_service_key(char *uuid, char *key, uint32_t key_size,
+int fcs_import_key(char *uuid, char *key, uint32_t key_size,
         char *status, unsigned int *status_size);
 
 /**
@@ -233,7 +347,7 @@ int run_fcs_import_service_key(char *uuid, char *key, uint32_t key_size,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_export_service_key(char *uuid, uint32_t key_id, char *key_dest,
+int fcs_export_key(char *uuid, uint32_t key_id, char *key_dest,
         unsigned int *key_size);
 
 /**
@@ -249,7 +363,7 @@ int run_fcs_export_service_key(char *uuid, uint32_t key_id, char *key_dest,
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
 
-int run_fcs_remove_service_key(char *uuid, uint32_t key_id);
+int fcs_remove_key(char *uuid, uint32_t key_id);
 
 /**
  * @brief Retrieve provisioning data from the FCS service.
@@ -266,7 +380,7 @@ int run_fcs_remove_service_key(char *uuid, uint32_t key_id);
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_get_service_key_info(char *uuid, uint32_t key_id, char *key_info,
+int fcs_get_key_info(char *uuid, uint32_t key_id, char *key_info,
         unsigned int *key_info_size);
 
 
@@ -286,7 +400,7 @@ int run_fcs_get_service_key_info(char *uuid, uint32_t key_id, char *key_info,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_create_service_key(char *uuid, char *key, uint32_t key_size,
+int fcs_create_key(char *uuid, char *key, uint32_t key_size,
         char *status, unsigned int *status_size);
 
 
@@ -303,7 +417,7 @@ int run_fcs_create_service_key(char *uuid, char *key, uint32_t key_size,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_service_get_provision_data(char *prov_data,
+int fcs_get_provision_data(char *prov_data,
         uint32_t *prov_data_size);
 
 
@@ -320,7 +434,7 @@ int run_fcs_service_get_provision_data(char *prov_data,
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_send_certificate(char *cert_data, uint32_t cert_size,
+int fcs_send_certificate(char *cert_data, uint32_t cert_size,
         uint32_t *status);
 
 /**
@@ -336,7 +450,7 @@ int run_fcs_send_certificate(char *cert_data, uint32_t cert_size,
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_service_counter_set_preauthorized(uint8_t type, uint32_t value,
+int fcs_counter_set_preauthorized(uint8_t type, uint32_t value,
         uint32_t test);
 
 /**
@@ -359,7 +473,7 @@ int run_fcs_service_counter_set_preauthorized(uint8_t type, uint32_t value,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_get_digest(char *uuid, uint32_t context_id, uint32_t key_id,
+int fcs_obtain_digest(char *uuid, uint32_t context_id, uint32_t key_id,
         uint32_t op_mode, uint32_t dig_size, char *src_data, uint32_t src_size,
         char *digest_data, uint32_t *digest_size);
 
@@ -383,7 +497,7 @@ int run_fcs_get_digest(char *uuid, uint32_t context_id, uint32_t key_id,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_mac_verify(char *uuid, uint32_t context_id, uint32_t key_id,
+int fcs_do_mac_verification(char *uuid, uint32_t context_id, uint32_t key_id,
         uint32_t dig_size, char *src_data, uint32_t src_size, char *dest_data,
         uint32_t *dest_size, uint32_t user_data_size);
 
@@ -405,7 +519,7 @@ int run_fcs_mac_verify(char *uuid, uint32_t context_id, uint32_t key_id,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_sdos_encrypt(char *uuid, uint32_t context_id, char *src_data,
+int fcs_encrypt_sdos(char *uuid, uint32_t context_id, char *src_data,
         uint32_t src_size, char *resp_data, uint32_t *resp_size);
 
 /**
@@ -426,7 +540,7 @@ int run_fcs_sdos_encrypt(char *uuid, uint32_t context_id, char *src_data,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_sdos_decrypt(char *uuid, uint32_t context_id, char *src_data,
+int fcs_decrypt_sdos(char *uuid, uint32_t context_id, char *src_data,
         uint32_t src_size, char *resp_data, uint32_t *resp_size, uint64_t
         owner_flag);
 
@@ -449,7 +563,7 @@ int run_fcs_sdos_decrypt(char *uuid, uint32_t context_id, char *src_data,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_hkdf_request(char *uuid, uint32_t key_id, uint32_t step_type,
+int fcs_request_hkdf(char *uuid, uint32_t key_id, uint32_t step_type,
         uint32_t mac_mode, char *input_buffer, uint32_t output_key_size,
         uint32_t *hkdf_status);
 
@@ -465,7 +579,7 @@ int run_fcs_hkdf_request(char *uuid, uint32_t key_id, uint32_t step_type,
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_get_chip_id(uint32_t *chip_low, uint32_t *chip_high);
+int fcs_obtain_chip_id(uint32_t *chip_low, uint32_t *chip_high);
 
 /**
  * @brief Request to get the certificate.
@@ -481,7 +595,7 @@ int run_fcs_get_chip_id(uint32_t *chip_low, uint32_t *chip_high);
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_attestation_get_certificate(int cert_req, char *cert_data,
+int fcs_attestation_obtain_certificate(int cert_req, char *cert_data,
         uint32_t *cert_size);
 
 /**
@@ -496,7 +610,7 @@ int run_fcs_attestation_get_certificate(int cert_req, char *cert_data,
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_attestation_certificate_reload(int cert_req);
+int fcs_attestation_reload_certificate(int cert_req);
 
 /**
  * @brief Sends an MCTP command using the FCS service.
@@ -513,7 +627,7 @@ int run_fcs_attestation_certificate_reload(int cert_req);
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_mctp_cmd_send(char *src_data, uint32_t src_size, char *resp_data,
+int fcs_send_mctp_cmd(char *src_data, uint32_t src_size, char *resp_data,
         uint32_t *resp_size);
 
 /**
@@ -527,7 +641,7 @@ int run_fcs_mctp_cmd_send(char *src_data, uint32_t src_size, char *resp_data,
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_get_jtag_idcode(uint32_t *jtag_id_code);
+int fcs_obtain_jtag_idcode(uint32_t *jtag_id_code);
 
 /**
  * @brief Retrieves the device identity using the FCS service.
@@ -541,7 +655,7 @@ int run_fcs_get_jtag_idcode(uint32_t *jtag_id_code);
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_get_device_identity(char *dev_identity, uint32_t *dev_id_size);
+int fcs_obtain_device_identity(char *dev_identity, uint32_t *dev_id_size);
 
 /**
  * @brief Perform AES encryption or decryption using the FCS service.
@@ -562,17 +676,66 @@ int run_fcs_get_device_identity(char *dev_identity, uint32_t *dev_id_size);
  * @param[in]  input_data  Pointer to the input data to be encrypted or decrypted.
  * @param[in]  input_size  Length of the input data.
  * @param[out] output_data Pointer to the buffer where the output data will be stored.
+ * @param[out] output_size Pointer to the length of the output data.
  *
  * @return
  * - 0: on success, or an error code on failure:
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_aes_cryption(char *uuid, uint32_t key_id, uint32_t context_id,
+int fcs_aes_cryption(char *uuid, uint32_t key_id, uint32_t context_id,
         uint32_t crypt_mode, uint32_t block_mode, uint32_t iv_src,
         char *iv_data, uint32_t tag_size, uint32_t aad_size, char *aad_data,
         char *tag_data, char *input_data, uint32_t input_size,
-        char *output_data);
+        char *output_data, uint32_t *output_size);
+
+/**
+ * @brief Initialize AES streaming operation.
+ *
+ * @param[in] uuid       The session ID associated with the FCS service.
+ * @param[in] context_id The context ID for the AES operation.
+ * @param[in] key_id     The ID of the key to be used for the operation.
+ * @param[in] block_mode The block mode for AES (e.g., ECB, CBC, GCM).
+ * @param[in] crypt_mode The cryptographic mode (encrypt or decrypt).
+ * @param[in] iv_src     The source of the initialization vector (IV).
+ * @param[in] iv_data    Pointer to the IV data.
+ * @param[in] tag_size   Length of the authentication tag (for GCM mode).
+ * @param[in] aad_size   Length of the additional authenticated data (AAD).
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_aes_crypt_init(char *uuid, uint32_t context_id,
+        uint32_t key_id, uint32_t block_mode, uint32_t crypt_mode,
+        uint32_t iv_src, char *iv_data, uint32_t tag_size,
+        uint32_t aad_size);
+
+/**
+ * @brief Update/finalize AES streaming operation.
+ *
+ * @param[in]  uuid        The session ID associated with the FCS service.
+ * @param[in]  context_id  The context ID for the AES operation.
+ * @param[in]  src_addr    Pointer to the input data.
+ * @param[in]  src_size    Length of the input data.
+ * @param[out] dest_addr   Pointer to the output buffer.
+ * @param[in]  dest_size   Length of the output buffer.
+ * @param[in]  aad_data    Pointer to the additional authenticated data (AAD).
+ * @param[in]  aad_size    Length of the AAD data.
+ * @param[in]  tag_data    Pointer to the authentication tag buffer (GCM).
+ * @param[in]  tag_size    Length of the authentication tag (GCM).
+ * @param[in]  final       Set to 1 to finalize the operation.
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_aes_update(char *uuid, uint32_t context_id,
+        char *src_addr, uint32_t src_size, char *dest_addr,
+        uint32_t dest_size, char *aad_data, uint32_t aad_size,
+        char *tag_data, uint32_t tag_size, uint8_t final);
 
 /**
  * @brief Sign a hash using ECDSA with the FCS service.
@@ -593,7 +756,7 @@ int run_fcs_aes_cryption(char *uuid, uint32_t key_id, uint32_t context_id,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_ecdsa_hash_sign(
+int fcs_ecdsa_hash_signing(
     char *uuid, uint32_t context_id, uint32_t key_id, uint32_t ecc_algo,
     char *hash_data, uint32_t hash_data_size, char *signed_data,
     uint32_t *signed_data_size);
@@ -621,7 +784,7 @@ int run_fcs_ecdsa_hash_sign(
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_ecdsa_hash_verify(char *uuid, uint32_t context_id, uint32_t key_id,
+int fcs_do_ecdsa_hash_verification(char *uuid, uint32_t context_id, uint32_t key_id,
         uint32_t ecc_algo, char *hash_data, uint32_t hash_data_size,
         char *sig_data, uint32_t sig_size, char *pub_key_data, uint32_t
         pub_key_size, char *dest_data, uint32_t *dest_size);
@@ -645,7 +808,7 @@ int run_fcs_ecdsa_hash_verify(char *uuid, uint32_t context_id, uint32_t key_id,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_ecdsa_sha2_data_sign(char *uuid, uint32_t context_id, uint32_t
+int fcs_ecdsa_sha2_data_signing(char *uuid, uint32_t context_id, uint32_t
         key_id, uint32_t ecc_algo, char *src_data, uint32_t src_size,
         char *dest_data, uint32_t *dest_size);
 
@@ -672,10 +835,51 @@ int run_fcs_ecdsa_sha2_data_sign(char *uuid, uint32_t context_id, uint32_t
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_ecdsa_sha2_data_sign_verify(char *uuid, uint32_t context_id,
+int fcs_do_ecdsa_sha2_data_sign_verification(char *uuid, uint32_t context_id,
         uint32_t key_id, uint32_t ecc_algo, char *src_data, uint32_t src_size,
         char *signed_data, uint32_t sig_size, char *pub_key_data, uint32_t
         pub_key_size, char *dest_data, uint32_t *dest_size);
+
+/**
+ * @brief Initialize ECDSA SHA2 data sign verify streaming operation.
+ *
+ * @param[in] uuid       The session ID associated with the FCS service.
+ * @param[in] context_id The context ID for the ECDSA operation.
+ * @param[in] key_id     The ID of the key to be used for verification.
+ * @param[in] ecc_algo   The ECC algorithm to use (e.g., NISTP-256, NISTP-384).
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_ecdsa_sha2_data_sign_verification_init(char *uuid, uint32_t context_id,
+        uint32_t key_id, uint32_t ecc_algo);
+
+/**
+ * @brief Update/finalize ECDSA SHA2 data sign verify streaming operation.
+ *
+ * @param[in]  uuid        The session ID associated with the FCS service.
+ * @param[in]  context_id  The context ID for the ECDSA operation.
+ * @param[in]  src_addr    Pointer to the source data to verify.
+ * @param[in]  src_size    Length of the source data.
+ * @param[in]  signed_data Pointer to the signature data to verify.
+ * @param[in]  sig_size    Length of the signature data.
+ * @param[in]  pub_key_data Pointer to the public key data.
+ * @param[in]  pub_key_size Length of the public key data.
+ * @param[out] dest_data   Pointer to the buffer where the verification result will be stored.
+ * @param[out] dest_size   Pointer to an integer to store the size of the verification result.
+ * @param[in]  final       Set to 1 to finalize the operation.
+ *
+ * @return
+ * - 0: on success, or an error code on failure:
+ * - -EIO:    If the FCS service is not initialized or other internal errors occur.
+ * - -EINVAL: If invalid parameters are provided.
+ */
+int fcs_ecdsa_sha2_data_sign_verification_update(char *uuid, uint32_t context_id,
+        char *src_addr, uint32_t src_size, char *signed_data, uint32_t sig_size,
+        char *pub_key_data, uint32_t pub_key_size, char *dest_data,
+        uint32_t *dest_size, uint8_t final);
 
 /**
  * @brief Retrieve the public key for an ECC key using the FCS service.
@@ -694,7 +898,7 @@ int run_fcs_ecdsa_sha2_data_sign_verify(char *uuid, uint32_t context_id,
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id, uint32_t
+int fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id, uint32_t
         key_id, uint32_t ecc_algo, char *pub_key_data, uint32_t *pub_key_size);
 
 /**
@@ -716,7 +920,7 @@ int run_fcs_ecdsa_get_public_key(char *uuid, uint32_t context_id, uint32_t
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_ecdh_request(char *uuid, uint32_t key_id, uint32_t context_id,
+int fcs_request_ecdh(char *uuid, uint32_t key_id, uint32_t context_id,
         uint32_t ecc_algo, char *pub_key_data, uint32_t pub_key_size,
         char *shared_sec_data, uint32_t *shared_sec_size);
 
@@ -729,7 +933,7 @@ int run_fcs_ecdh_request(char *uuid, uint32_t key_id, uint32_t context_id,
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_qspi_open(void);
+int fcs_open_qspi(void);
 
 /**
  * @brief Close the exclusive access to the QSPI interface
@@ -740,7 +944,7 @@ int run_fcs_qspi_open(void);
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_qspi_close(void);
+int fcs_close_qspi(void);
 
 /**
  * @brief configure the chip select lines for the QSPI interface
@@ -753,7 +957,7 @@ int run_fcs_qspi_close(void);
  * - 0: on success, or an error code on failure:
  * - -EIO: If the FCS service is not initialized or other internal errors occur.
  */
-int run_fcs_qspi_set_cs(uint32_t chip_sel_info);
+int fcs_set_qspi_cs(uint32_t chip_sel_info);
 
 /**
  * @brief Reads data from the QSPI interface
@@ -769,7 +973,7 @@ int run_fcs_qspi_set_cs(uint32_t chip_sel_info);
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_qspi_read(uint32_t qspi_addr, uint32_t data_len, char *buffer);
+int fcs_read_qspi(uint32_t qspi_addr, uint32_t data_len, char *buffer);
 
 /**
  * @brief Writes data to the QSPI interface
@@ -785,7 +989,7 @@ int run_fcs_qspi_read(uint32_t qspi_addr, uint32_t data_len, char *buffer);
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_qspi_write(uint32_t qspi_addr, uint32_t data_len, char *buffer);
+int fcs_write_qspi(uint32_t qspi_addr, uint32_t data_len, char *buffer);
 
 /**
  * @brief Erases data from the QSPI interface
@@ -800,7 +1004,7 @@ int run_fcs_qspi_write(uint32_t qspi_addr, uint32_t data_len, char *buffer);
  * - -EIO:    If the FCS service is not initialized or other internal errors occur.
  * - -EINVAL: If invalid parameters are provided.
  */
-int run_fcs_qspi_erase(uint32_t qspi_addr, uint32_t data_len);
+int fcs_erase_qspi(uint32_t qspi_addr, uint32_t data_len);
 
 /**
  * @}

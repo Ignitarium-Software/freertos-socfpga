@@ -33,41 +33,51 @@
 #define SPI_RX_FULL_INT       0x10U  /* RXFIS / RXFIM bit 4 */
 #define SPI_ALL_INTERRUPTS    0x3FU  /* all six IMR bits */
 
-void spi_init(uint32_t instance, spi_role_t role);
-void spi_deinit(uint32_t instance, spi_role_t role);
-uint32_t spi_get_base_addr(uint32_t instance, spi_role_t role);
-void spi_set_slave_output(uint32_t base_addr, bool enable);
+/* Max value that can be written to RX_SAMPLE_DLY register */
+#define SPI_RD_SAMPLE_DLY_MAX   64U
 
-void spi_select_chip(uint32_t instance, uint32_t slave);
-/**
- * @brief Set SPI controller configuration.
- *
- * @param base_addr SPI base address.
- * @param freq         Requested SCLK frequency in Hz.
- * @param mode         SPI mode (CPOL/CPHA).
- *
- * @return 0 on success, negative errno on failure.
- */
-int32_t spi_set_config(uint32_t base_addr, uint32_t freq, spi_mode_t mode);
-void spi_get_config(uint32_t base_addr, uint32_t *freq, spi_mode_t *mode);
-void spi_set_transfermode(uint32_t base_addr, uint32_t mode);
+void spi_ll_init(uint32_t instance, spi_role_t role);
 
-void spi_enable(uint32_t base_addr);
-void spi_disable(uint32_t base_addr);
+void spi_ll_deinit(uint32_t instance, spi_role_t role);
 
-uint32_t spi_get_freq(uint32_t base_addr);
+uint32_t spi_ll_get_base_addr(uint32_t instance, spi_role_t role);
 
-uint32_t spi_write_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes);
-uint32_t spi_read_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes);
+void spi_ll_set_slave_output(uint32_t base_addr, bool enable);
 
-uint32_t spi_get_interrupt_status(uint32_t base_addr);
-void spi_enable_interrupt(uint32_t base_addr, uint32_t ir_id);
-void spi_disable_interrupt(uint32_t base_addr, uint32_t ir_id);
-void spi_clear_rx_overflow(uint32_t base_addr);
+void spi_ll_select_chip(uint32_t instance, uint32_t slave);
+
+int32_t spi_ll_set_config(uint32_t base_addr, uint32_t freq, spi_mode_t mode);
+
+int32_t spi_ll_set_rx_sampling_delay(uint32_t base_addr, uint32_t sample_delay_steps);
+
+void spi_ll_get_config(uint32_t base_addr, uint32_t *freq, spi_mode_t *mode);
+
+void spi_ll_set_transfermode(uint32_t base_addr, uint32_t mode);
+
+void spi_ll_enable(uint32_t base_addr);
+
+void spi_ll_disable(uint32_t base_addr);
+
+uint32_t spi_ll_get_freq(uint32_t base_addr);
+
+uint32_t spi_ll_write_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes);
+
+uint32_t spi_ll_read_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes);
+
+uint32_t spi_ll_get_interrupt_status(uint32_t base_addr);
+
+void spi_ll_enable_interrupt(uint32_t base_addr, uint32_t ir_id);
+
+void spi_ll_disable_interrupt(uint32_t base_addr, uint32_t ir_id);
+
+void spi_ll_clear_rx_overflow(uint32_t base_addr);
+
 void spi_ll_set_rx_threshold(uint32_t base_addr, uint8_t rx_thr);
 
 void spi_ll_enable_dma(uint32_t base_addr, bool tx_enable, bool rx_enable);
+
 void spi_ll_disable_dma(uint32_t base_addr);
+
 void spi_ll_set_dma_thresholds(uint32_t base_addr, uint8_t tx_level,
         uint8_t rx_level);
 

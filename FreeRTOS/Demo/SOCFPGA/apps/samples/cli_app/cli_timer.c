@@ -89,26 +89,30 @@ extern SemaphoreHandle_t print_semaphore;
 timer_handle_t timer_handle;
 uint8_t is_timer_open = 0, is_timer_running = 0;
 
-void timer_callback( void *buff )
+void timer_callback(void *usr_cntxt)
 {
-    timer_handle_t timer_handle_loc = (timer_handle_t) buff;
-    timer_stop(timer_handle_loc);
-    timer_close(timer_handle_loc);
+    /*
+     * Runs in ISR context, htimer comes from usr_cntxt (captured at
+     * timer_set_callback() registration) instead of the global timer_handle,
+     * since the global can be reassigned/cleared from CLI task context
+     * (timer config/close) concurrently with this ISR
+     */
+    timer_handle_t htimer = (timer_handle_t)usr_cntxt;
+    if (htimer == NULL)
+    {
+        htimer = timer_handle;
+    }
+    timer_stop(htimer);
+    timer_close(htimer);
     is_timer_running = 0;
     is_timer_open = 0;
-    timer_handle_loc = NULL;
-    xSemaphoreGiveFromISR(print_semaphore,NULL);
-}
-void timer_callback_free( void *buff )
-{
-    timer_handle_t timer_handle_loc = (timer_handle_t) buff;
-    timer_stop(timer_handle_loc);
+    htimer = NULL;
     xSemaphoreGiveFromISR(print_semaphore,NULL);
 }
 
 void print_status(void *data)
 {
-    uint32_t*count = (uint32_t*)data;
+    uint32_t *count = (uint32_t*)data;
     timer_set_callback(timer_handle, timer_callback, timer_handle);
     timer_set_period_us(timer_handle, *count);
     osal_semaphore_wait(print_semaphore,portMAX_DELAY);
@@ -182,7 +186,7 @@ BaseType_t cmd_timer( char *write_buffer, size_t write_buffer_len,
             {
                 return pdFAIL;
             }
-            timer_handle_t ptimer_handle_temp;
+            timer_handle_t htimer;
             /* set mode to free running if user entered value is freerunning period*/
             if (count == FREE_RUNNING_PERIOD)
             {
@@ -194,12 +198,12 @@ BaseType_t cmd_timer( char *write_buffer, size_t write_buffer_len,
                         "\r\nOnly one instance supported at a time. Please run 'timer close' before a new configuration.");
                 return pdFAIL;
             }
-            ptimer_handle_temp = timer_open(timer_id);
-            if (ptimer_handle_temp != NULL)
+            htimer = timer_open(timer_id);
+            if (htimer != NULL)
             {
                 is_timer_open = 1;
                 is_timer_running = 0;
-                timer_handle = ptimer_handle_temp;
+                timer_handle = htimer;
                 switch (mode)
                 {
                 case ONE_SHOT:

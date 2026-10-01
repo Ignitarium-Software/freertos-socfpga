@@ -48,7 +48,7 @@
 #include <FreeRTOSIPConfig.h>
 
 #include "socfpga_xgmac.h"
-#include "socfpga_xgmac_phy.h"
+#include "socfpga_phy.h"
 #include "osal_log.h"
 /*-----------------------------------------------------------*/
 
@@ -225,6 +225,7 @@ BaseType_t prvPhyCheckLinkStatus( TickType_t xMaxTimeTicks,
 
 /* A copy of PHY register 1: 'COPPER_STATUS_REG' */
 static BaseType_t xPHYLinkStatus = pdFALSE;
+static BaseType_t xPHYNeedReconfig = pdFALSE;
 /*-----------------------------------------------------------*/
 
 /* The function xNetworkInterfaceInitialise() will be called as
@@ -252,7 +253,7 @@ static SemaphoreHandle_t xSemaphoreCounterTx;
 /*-----------------------------------------------------------*/
 
 /* Initialize PHY parameters */
-static xgmac_phy_config_t xPhyDev =
+eth_phy_config_t xPhyDev =
 {
     .phy_address            = 0,
     .phy_identifier         = 0,
@@ -276,6 +277,7 @@ BaseType_t xRetVal;
 int32_t xStatus;
 const TickType_t xWaitLinkDelay = pdMS_TO_TICKS( 1000U );
 xgmac_handle_t pXGMACHandle = NULL;
+uint32_t xgmac_base_addr = 0U;
 uint8_t * pucBufferPool = NULL;
 
     eXGMACState = XGMAC_EMACInit;
@@ -298,7 +300,9 @@ uint8_t * pucBufferPool = NULL;
                 break;
             }
 
-            xStatus = xgmac_set_callback( pXGMACHandle, \
+            xgmac_base_addr = xgmac_get_inst_base_addr( pXGMACHandle );
+
+            xStatus = xgmac_set_callback( pXGMACHandle,
                                           prvEMACIRQHanlderCallback,
                                           xgmac_get_err_info( pXGMACHandle ) );
 
@@ -316,7 +320,8 @@ uint8_t * pucBufferPool = NULL;
         case XGMAC_PHYInit:
 
             /* Detect the PHY */
-            xStatus = xgmac_phy_discover( pXGMACHandle, &xPhyDev );
+            xStatus = eth_phy_discover( xgmac_base_addr,
+                                        &xPhyDev );
 
             if( xStatus != 0 )
             {
@@ -326,7 +331,8 @@ uint8_t * pucBufferPool = NULL;
             }
 
             /* Initialize PHY */
-            xStatus = xgmac_phy_initialize( pXGMACHandle, &xPhyDev );
+            xStatus = eth_phy_initialize( xgmac_base_addr,
+                                          &xPhyDev );
 
             if( xStatus != 0 )
             {
@@ -403,7 +409,9 @@ uint8_t * pucBufferPool = NULL;
         /* Fall through. */
         /* Configure and start the EMAC */
         case XGMAC_EMACStart:
-            xStatus = xgmac_cfg_speed_mode( pXGMACHandle, &xPhyDev );
+            xStatus = xgmac_set_link_cfg( pXGMACHandle,
+                                                xPhyDev.speed_mbps,
+                                                xPhyDev.duplex );
 
             if( xStatus != 0 )
             {
@@ -771,7 +779,7 @@ volatile int msgCount = 0;
         }
 
         /* Update the descriptor with new address and rest other fields */
-        if( xgmac_refill_rx_descriptor( pXGMACHandle, pucRefillRxBuffer ) != 0 )
+        if( xgmac_refill_rx_desc( pXGMACHandle, pucRefillRxBuffer ) != 0 )
         {
             ERROR( "SOCFPGA_XGMAC: Refill Rx Descriptor Failed....\n" );
             break;
@@ -816,8 +824,8 @@ static inline BaseType_t xReadPhyStatus( NetworkInterface_t * pxInterface )
 int instance = ( int ) ( ( uintptr_t ) pxInterface->pvArgument );
 xgmac_handle_t pXGMACHandle = ( xgmac_handle_t ) xEmacConfig[ instance ].hxgmac;
 
-    return phy_get_link_status( xgmac_get_inst_base_addr( pXGMACHandle ),
-                                           &xPhyDev );
+    return eth_phy_get_link_status( xgmac_get_inst_base_addr( pXGMACHandle ),
+            &xPhyDev );
 }
 /*-----------------------------------------------------------*/
 
@@ -853,10 +861,11 @@ BaseType_t ucRemainInErrState = pdFALSE;
 xgmac_err_t xErrType = ( xgmac_err_t ) ucErrStatus;
 BaseType_t xStatus = xReadPhyStatus( pxInterface );
 
-    if( xStatus != xPHYLinkStatus )
+    if( xStatus != xPHYLinkStatus && xStatus == pdFALSE )
     {
-        /* PHY state changed, mark as down for reconfigure */
-        xPHYLinkStatus = 0;
+        /* PHY state changed, mark as reconfiguration required */
+        xPHYLinkStatus = pdFALSE;
+        xPHYNeedReconfig = pdTRUE;
     }
     switch( xErrType )
     {
@@ -943,7 +952,7 @@ xgmac_handle_t pXGMACHandle = ( xgmac_handle_t ) xEmacConfig[ instance ].hxgmac;
                 return pdFAIL;
             }
         #endif /* if ( ipconfigZERO_COPY_RX_DRIVER != 0 ) */
-        xStatus = xgmac_refill_rx_descriptor( pXGMACHandle, pucBufAddr );
+        xStatus = xgmac_refill_rx_desc( pXGMACHandle, pucBufAddr );
 
         if( xStatus != 0 )
         {
@@ -1327,18 +1336,23 @@ xgmac_handle_t pXGMACHandle = ( xgmac_handle_t ) xEmacConfig[ instance ].hxgmac;
             xStatus = xReadPhyStatus( pxInterface );
 
             /* PHY link status has been changed need to update XGMAC Configurations */
-            if( xPHYLinkStatus != xStatus )
+            if( xPHYNeedReconfig != pdFALSE )
             {
-                /* PHY link is up since last check, reconfigure parameters */
-                if( xStatus == pdTRUE )
+                /* Reconfiguring PHY due to link status change and error */
+                if( eth_phy_update_link( xgmac_get_inst_base_addr( pXGMACHandle ),
+                                         &xPhyDev ) != 0 )
                 {
-                    if( xgmac_update_xgmac_speed_mode( pXGMACHandle, &xPhyDev ) != 0 )
-                    {
-                        ERROR( "SOCFPGA_XGMAC: Updating Configurations failed....\n" );
-                    }
+                    ERROR( "SOCFPGA_XGMAC: Updating Configurations failed....\n" );
                 }
-                xStatus = xReadPhyStatus( pxInterface );
+                else if( xgmac_set_link_cfg( pXGMACHandle,
+                                                   xPhyDev.speed_mbps,
+                                                   xPhyDev.duplex ) != 0 )
+                {
+                    ERROR( "SOCFPGA_XGMAC: Updating XGMAC speed/mode failed....\n" );
+                }
+                xPHYNeedReconfig = pdFALSE;
 
+                xStatus = xReadPhyStatus( pxInterface );
                 if( xPHYLinkStatus != xStatus )
                 {
                     xPHYLinkStatus = xStatus;

@@ -384,15 +384,11 @@ TU_ATTR_ALWAYS_INLINE static inline uint32_t osal_pipe_space_available(osal_pipe
 TU_ATTR_ALWAYS_INLINE static inline uint32_t osal_get_kernel_state()
 {
     uint32_t state;
-    BaseType_t xShedState;
+    BaseType_t xSchedulerState;
 
-#if configNUMBER_OF_CORES > 1
-    xShedState = xTaskGetSchedulerStateFromISR();
-#else
-    xShedState = xTaskGetSchedulerState();
-#endif
+    xSchedulerState = xTaskGetSchedulerState();
 
-    switch(xShedState)
+    switch(xSchedulerState)
     {
         case taskSCHEDULER_RUNNING:
             state = OSAL_KERNEL_RUNNING;

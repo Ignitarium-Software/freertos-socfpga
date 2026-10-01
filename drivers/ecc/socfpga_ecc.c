@@ -396,55 +396,55 @@ int ecc_enable_modules(uint32_t modules)
 
 int ecc_init(void)
 {
-    BaseType_t ret;
+    int err;
 
     /* Disabling ECC interrupts */
     SMC_WR_REG32(SYS_MNGR_BASE_ADDR + SYS_MNGR_ECC_INTMASK_SET, 0x7FFFEU);
 
     /* Single bit error interrupt */
-    ret = interrupt_register_isr(SERR_GLOBAL, ecc_irq_handler, NULL);
-    if (ret != 0)
+    err = interrupt_register_isr(SERR_GLOBAL, ecc_irq_handler, NULL);
+    if (err != 0)
     {
         return -EIO;
     }
-    ret = interrupt_enable(SERR_GLOBAL, GIC_INTERRUPT_PRIORITY_EDAC);
-    if (ret != 0)
+    err = interrupt_enable(SERR_GLOBAL, GIC_INTERRUPT_PRIORITY_EDAC);
+    if (err != 0)
     {
         return -EIO;
     }
 
     /* Single bit error interrupt for QSPI */
-    ret = interrupt_register_isr(SDM_HPS_SPARE_INTR1, ecc_qspi_irq_handler, NULL);
-    if (ret != 0)
+    err = interrupt_register_isr(SDM_HPS_SPARE_INTR1, ecc_qspi_irq_handler, NULL);
+    if (err != 0)
     {
         return -EIO;
     }
-    ret = interrupt_enable(SDM_HPS_SPARE_INTR1, GIC_INTERRUPT_PRIORITY_EDAC);
-    if (ret != 0)
+    err = interrupt_enable(SDM_HPS_SPARE_INTR1, GIC_INTERRUPT_PRIORITY_EDAC);
+    if (err != 0)
     {
         return -EIO;
     }
 
     /* Double bit error interrupt */
-    ret = interrupt_register_isr(ECC_DERR_INTR_N, ecc_irq_handler, NULL);
-    if (ret != 0)
+    err = interrupt_register_isr(ECC_DERR_INTR_N, ecc_irq_handler, NULL);
+    if (err != 0)
     {
         return -EIO;
     }
-    ret = interrupt_enable(ECC_DERR_INTR_N, GIC_INTERRUPT_PRIORITY_EDAC);
-    if (ret != 0)
+    err = interrupt_enable(ECC_DERR_INTR_N, GIC_INTERRUPT_PRIORITY_EDAC);
+    if (err != 0)
     {
         return -EIO;
     }
 
     /* Double bit error interrupt for QSPI */
-    ret = interrupt_register_isr(SDM_HPS_SPARE_INTR2, ecc_qspi_irq_handler, NULL);
-    if (ret != 0)
+    err = interrupt_register_isr(SDM_HPS_SPARE_INTR2, ecc_qspi_irq_handler, NULL);
+    if (err != 0)
     {
         return -EIO;
     }
-    ret = interrupt_enable(SDM_HPS_SPARE_INTR2, GIC_INTERRUPT_PRIORITY_EDAC);
-    if (ret != 0)
+    err = interrupt_enable(SDM_HPS_SPARE_INTR2, GIC_INTERRUPT_PRIORITY_EDAC);
+    if (err != 0)
     {
         return -EIO;
     }

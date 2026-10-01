@@ -120,7 +120,8 @@ typedef enum
     SPI_GET_TX_NBYTES,  /*!< Get last TX byte count (uint32_t*, output). */
     SPI_GET_RX_NBYTES,  /*!< Get last RX byte count (uint32_t*, output). */
     SPI_ENABLE_DMA,     /*!< Enable DMA using spi_dma_config_t (input). */
-    SPI_DISABLE_DMA,  /*!< Disable DMA mode; buf is ignored (pass NULL). */
+    SPI_DISABLE_DMA, /*!< Disable DMA mode; buf is ignored (pass NULL). */
+    SPI_SET_RX_SAMPLING_DELAY, /*!< Set RX_SAMPLE_DLY.RSD (uint32_t*, input: 0..64). */
 } spi_ioctl_t;
 
 /**
@@ -263,15 +264,15 @@ int32_t spi_set_callback(spi_handle_t const hspi, spi_callback_t callback,
  *
  *
  * @note SPI_SET_CONFIG: Set the SPI controller configuration.
- * buf points to a spi_cfg_t provided by the caller (driver reads it).
+ * param points to a spi_cfg_t provided by the caller (driver reads it).
  *
  * @note SPI_GET_CONFIG: Get the current SPI controller configuration.
- * buf points to a spi_cfg_t provided by the caller (driver populates it).
+ * param points to a spi_cfg_t provided by the caller (driver populates it).
  *
  * @note SPI_GET_TX_NBYTES: Get the number of bytes written by the last
  * operation. Call this in the caller task (sync) or in the application
  * callback (async), right after the last operation completes.
- * buf points to a uint32_t provided by the caller (driver populates it).
+ * param points to a uint32_t provided by the caller (driver populates it).
  *
  * - If the last operation did not use a TX buffer (txbuf was NULL), this
  *   returns 0.
@@ -280,35 +281,55 @@ int32_t spi_set_callback(spi_handle_t const hspi, spi_callback_t callback,
  * @note SPI_GET_RX_NBYTES: Get the number of bytes read by the last
  * operation. Call this in the caller task (sync) or in the application
  * callback (async), right after the last operation completes.
- * buf points to a uint32_t provided by the caller (driver populates it).
+ * param points to a uint32_t provided by the caller (driver populates it).
  *
  * - If the last operation did not use an RX buffer (rxbuf was NULL), this
  *   returns 0.
  * - Otherwise, this returns the number of bytes received.
  *
  * @note SPI_ENABLE_DMA: Enable DMA transfer mode.
- * buf points to a spi_dma_config_t provided by the caller (driver reads it).
+ * param points to a spi_dma_config_t provided by the caller (driver reads it).
  * This request is valid only when there is no ongoing transfer.
  *
  * @note SPI_DISABLE_DMA: Disable DMA transfer mode.
- * buf is ignored (pass NULL).
+ * param is ignored (pass NULL).
  * This request is valid only when there is no ongoing transfer.
  *
+ * @note SPI_SET_RX_SAMPLING_DELAY: Shift the sample point of the SPI RX
+ * line, in master mode of operation, to compensate for round-trip
+ * signal propagation delay on the bus.
+ *
+ * As the SPI clock speed increases, the bit period (T = 1 / SPI clock)
+ * shrinks, while the round-trip delay of the clock travelling out to the
+ * slave and the response data travelling back to the master stays roughly
+ * fixed (set by trace length and slave turnaround time). Once this
+ * round-trip delay becomes a significant fraction of T (or grows beyond
+ * T/2), the default sample point can land outside the valid data window,
+ * so the master risks sampling data that is stale or still transitioning,
+ * resulting in silent bit errors. Shifting the sample point later re-aligns
+ * it with the middle of the valid data window, allowing higher SPI clock
+ * speeds to be used reliably on longer or slower physical links without
+ * changing the electrical layout.
+ * In practice this is tuned once, typically at startup or after a clock
+ * speed change, by sweeping the delay across its range and checking
+ * received data against a known pattern until the transfer succeeds.
+ * param points to a uint32_t value in the range 0..64.
  * @param[in]     hspi The SPI peripheral handle returned in open() call.
  * @param[in]     cmd  The configuration request from one of the spi_ioctl_t.
- * @param[in,out] buf  The configuration values for the SPI port.
+ * @param[in,out] param  The configuration values for the SPI port.
  *
  * @return
  * - 0:       on success
  * - -EINVAL: if
  *     - hspi is NULL
  *     - hspi is not opened yet
- *     - buf is NULL for requests which require a buffer
+ *     - param is NULL for requests which require a buffer
  * - -EBUSY:  if the bus is busy for requests which require an idle bus
  *            (SPI_SET_CONFIG/SPI_ENABLE_DMA/SPI_DISABLE_DMA)
  * - -EBUSY:  if DMA is already enabled for SPI_ENABLE_DMA
+ * - -ENOTSUP: if called with SPI_SET_RX_SAMPLE_DELAY on slave handle
  */
-int32_t spi_ioctl(spi_handle_t const hspi, spi_ioctl_t cmd, void *const buf);
+int32_t spi_ioctl(spi_handle_t const hspi, spi_ioctl_t cmd, void *const param);
 
 /**
  * @brief Perform a synchronous SPI transfer.

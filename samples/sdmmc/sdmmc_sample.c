@@ -109,10 +109,10 @@ void sdmmc_task(void)
 
     PRINT("\rWriting data to the card...\r");
 #if USE_SYNC
-    xfer_resp = sdmmc_write_block_sync((uint64_t *)write_buffer, write_address,
+    xfer_resp = sdmmc_write_block_sync(write_address, (uint64_t *)write_buffer,
             block_size, number_of_blocks);
 #else
-    status = sdmmc_write_block_async((uint64_t *)write_buffer, write_address,
+    status = sdmmc_write_block_async(write_address, (uint64_t *)write_buffer,
             block_size, number_of_blocks, sdmmc_cb);
     if (status != 0)
     {
@@ -137,10 +137,10 @@ void sdmmc_task(void)
 
     PRINT("\rReading data from the card...\r");
 #if USE_SYNC
-    xfer_resp = sdmmc_read_block_sync((uint64_t *)read_buffer, read_address,
+    xfer_resp = sdmmc_read_block_sync(read_address, (uint64_t *)read_buffer,
             block_size, number_of_blocks);
 #else
-    status = sdmmc_read_block_async((uint64_t *)read_buffer, read_address,
+    status = sdmmc_read_block_async(read_address, (uint64_t *)read_buffer,
             block_size, number_of_blocks, sdmmc_cb);
 
     if (status != 0)

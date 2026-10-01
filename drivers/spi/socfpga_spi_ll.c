@@ -12,11 +12,13 @@
 #include "socfpga_clk_mngr.h"
 #include "socfpga_spi_reg.h"
 #include "socfpga_rst_mngr.h"
+#include "osal.h"
+#include "osal_log.h"
 
 /**
  * @brief Get clock shift based on role/instance.
  */
-static uint32_t spi_get_clk_shift(uint32_t instance, spi_role_t role)
+static uint32_t spi_ll_get_clk_shift(uint32_t instance, spi_role_t role)
 {
     if (role == SPI_ROLE_SLAVE)
     {
@@ -28,12 +30,12 @@ static uint32_t spi_get_clk_shift(uint32_t instance, spi_role_t role)
 /**
  * @brief Enable the clock for the SPI instance.
  */
-static void spi_enable_clock(uint32_t instance, spi_role_t role)
+static void spi_ll_enable_clock(uint32_t instance, spi_role_t role)
 {
     uint32_t val;
     uint32_t shift;
 
-    shift = spi_get_clk_shift(instance, role);
+    shift = spi_ll_get_clk_shift(instance, role);
     val = RD_REG32(CLK_PERPLL);
     val |= (1U << shift);
     WR_REG32(CLK_PERPLL_EN, val);
@@ -42,12 +44,12 @@ static void spi_enable_clock(uint32_t instance, spi_role_t role)
 /**
  * @brief Disable the clock for the SPI instance.
  */
-static void spi_disable_clock(uint32_t instance, spi_role_t role)
+static void spi_ll_disable_clock(uint32_t instance, spi_role_t role)
 {
     uint32_t val;
     uint32_t shift;
 
-    shift = spi_get_clk_shift(instance, role);
+    shift = spi_ll_get_clk_shift(instance, role);
     val = RD_REG32(CLK_PERPLL);
     val &= ~(1U << shift);
     WR_REG32(CLK_PERPLL_EN, val);
@@ -56,7 +58,7 @@ static void spi_disable_clock(uint32_t instance, spi_role_t role)
 /**
  * @brief Enable SPI serial interface.
  */
-void spi_enable(uint32_t base_addr)
+void spi_ll_enable(uint32_t base_addr)
 {
     uint32_t val = 0U;
     val |= 1U << SPI_SSIENR_SSI_EN_POS;
@@ -66,7 +68,7 @@ void spi_enable(uint32_t base_addr)
 /**
  * @brief Disable SPI serial interface.
  */
-void spi_disable(uint32_t base_addr)
+void spi_ll_disable(uint32_t base_addr)
 {
     uint32_t val = 0U;
     WR_REG32((base_addr + SPI_SSIENR), val);
@@ -123,7 +125,7 @@ void spi_ll_set_dma_thresholds(uint32_t base_addr, uint8_t tx_level,
     WR_REG32((base_addr + SPI_DMARDLR), val);
 }
 
-uint32_t spi_get_base_addr(uint32_t instance, spi_role_t role)
+uint32_t spi_ll_get_base_addr(uint32_t instance, spi_role_t role)
 {
     if (role == SPI_ROLE_SLAVE)
     {
@@ -132,11 +134,11 @@ uint32_t spi_get_base_addr(uint32_t instance, spi_role_t role)
     return GET_BASE_ADDR_MASTER(instance);
 }
 
-void spi_set_slave_output(uint32_t base_addr, bool enable)
+void spi_ll_set_slave_output(uint32_t base_addr, bool enable)
 {
     uint32_t val;
 
-    spi_disable(base_addr);
+    spi_ll_disable(base_addr);
     val = RD_REG32(base_addr + SPI_CTRLR0);
     if (enable == true)
     {
@@ -147,13 +149,13 @@ void spi_set_slave_output(uint32_t base_addr, bool enable)
         val |= (1U << SPI_CTRLR0_SLV_OE_POS);
     }
     WR_REG32((base_addr + SPI_CTRLR0), val);
-    spi_enable(base_addr);
+    spi_ll_enable(base_addr);
 }
 
 /**
  * @brief Set SPI FIFO threshold.
  */
-static void spi_set_fifo_threshold(uint32_t base_addr)
+static void spi_ll_set_fifo_threshold(uint32_t base_addr)
 {
     uint32_t val;
 
@@ -175,12 +177,12 @@ static void spi_set_fifo_threshold(uint32_t base_addr)
 /**
  * @brief Initialize SPI instance.
  */
-void spi_init(uint32_t instance, spi_role_t role)
+void spi_ll_init(uint32_t instance, spi_role_t role)
 {
     volatile int32_t i;
     reset_periphrl_t reset_id;
 
-    spi_enable_clock(instance, role);
+    spi_ll_enable_clock(instance, role);
 
     if (role == SPI_ROLE_SLAVE)
     {
@@ -204,31 +206,29 @@ void spi_init(uint32_t instance, spi_role_t role)
         return;
     }
 
-    spi_set_fifo_threshold(spi_get_base_addr(instance, role));
+    spi_ll_set_fifo_threshold(spi_ll_get_base_addr(instance, role));
 }
 
 /**
  * @brief Deinitialize SPI instance.
  */
-void spi_deinit(uint32_t instance, spi_role_t role)
+void spi_ll_deinit(uint32_t instance, spi_role_t role)
 {
     uint32_t base_addr;
 
-    base_addr = spi_get_base_addr(instance, role);
-    spi_disable(base_addr);
-    spi_disable_clock(instance, role);
+    base_addr = spi_ll_get_base_addr(instance, role);
+    spi_ll_disable(base_addr);
+    spi_ll_disable_clock(instance, role);
 }
 
 /**
  * @brief Set SPI configuration.
  */
-int32_t spi_set_config(uint32_t base_addr, uint32_t freq, spi_mode_t mode)
+int32_t spi_ll_set_config(uint32_t base_addr, uint32_t freq, spi_mode_t mode)
 {
     uint32_t sclk_dvsr;
     uint32_t spi_clk = 0U;
     uint32_t val;
-
-    spi_disable(base_addr);
 
     val = RD_REG32(base_addr + SPI_CTRLR0);
     val &= ~((uint32_t)3U << SPI_CTRLR0_SPI_FRF_POS);
@@ -273,7 +273,8 @@ int32_t spi_set_config(uint32_t base_addr, uint32_t freq, spi_mode_t mode)
         return -EINVAL;
     }
 
-    sclk_dvsr = spi_clk / freq;
+    /* Force divisor to ceil value */
+    sclk_dvsr = (spi_clk + freq) / freq;
 
     /* BAUDR.SCKDV must be even; clamp to 65534 (0 disables sclk_out). */
     if (sclk_dvsr > 65534U)
@@ -291,17 +292,31 @@ int32_t spi_set_config(uint32_t base_addr, uint32_t freq, spi_mode_t mode)
     return 0;
 }
 
+int32_t spi_ll_set_rx_sampling_delay(uint32_t base_addr, uint32_t sample_delay_steps)
+{
+    if (sample_delay_steps > SPI_RD_SAMPLE_DLY_MAX)
+    {
+        return -ERANGE;
+    }
+
+    WR_REG32((base_addr + SPI_RX_SAMPLE_DLY),
+            (((uint32_t)sample_delay_steps << SPI_RX_SAMPLE_DLY_RSD_POS) &
+            SPI_RX_SAMPLE_DLY_RSD_MASK));
+
+    return 0;
+}
+
 /**
  * @brief Get SPI configuration parameters
  */
-void spi_get_config(uint32_t base_addr, uint32_t *freq, spi_mode_t *mode)
+void spi_ll_get_config(uint32_t base_addr, uint32_t *freq, spi_mode_t *mode)
 {
     uint32_t val;
     uint32_t bf_val;
     val = 0U;
     bf_val = 0U;
 
-    *freq = spi_get_freq(base_addr);
+    *freq = spi_ll_get_freq(base_addr);
 
     val = RD_REG32(base_addr + SPI_CTRLR0);
     bf_val = (val >> SPI_CTRLR0_SCPH_POS) & 3U;
@@ -330,24 +345,24 @@ void spi_get_config(uint32_t base_addr, uint32_t *freq, spi_mode_t *mode)
 /**
  * @brief Set SPI transfer mode.
  */
-void spi_set_transfermode(uint32_t base_addr, uint32_t mode)
+void spi_ll_set_transfermode(uint32_t base_addr, uint32_t mode)
 {
     uint32_t val = 0U;
 
-    spi_disable(base_addr);
+    spi_ll_disable(base_addr);
     val = RD_REG32(base_addr + SPI_CTRLR0);
 
     val &= ~((uint32_t)3U << SPI_CTRLR0_TMOD_POS);
     val |= (mode & 3U) << SPI_CTRLR0_TMOD_POS;
 
     WR_REG32((base_addr + SPI_CTRLR0), val);
-    spi_enable(base_addr);
+    spi_ll_enable(base_addr);
 }
 
 /**
  * @brief Get SPI transfer frequency.
  */
-uint32_t spi_get_freq(uint32_t base_addr)
+uint32_t spi_ll_get_freq(uint32_t base_addr)
 {
     uint32_t sclk_dvsr, spi_clk = 0U;
     uint32_t freq;
@@ -374,7 +389,7 @@ uint32_t spi_get_freq(uint32_t base_addr)
 /**
  * @brief Select SPI slave
  */
-void spi_select_chip(uint32_t instance, uint32_t slave)
+void spi_ll_select_chip(uint32_t instance, uint32_t slave)
 {
     uint32_t base_addr;
     uint32_t val;
@@ -408,7 +423,7 @@ void spi_select_chip(uint32_t instance, uint32_t slave)
 /**
  * @brief Write data to Tx FIFO.
  */
-uint32_t spi_write_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes)
+uint32_t spi_ll_write_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes)
 {
     uint32_t bytes_done = 0;
 
@@ -454,7 +469,7 @@ uint32_t spi_write_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes)
 /**
  * @brief Read data from Rx FIFO.
  */
-uint32_t spi_read_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes)
+uint32_t spi_ll_read_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes)
 {
     uint32_t bytes_done = 0;
 
@@ -505,7 +520,7 @@ uint32_t spi_read_fifo(uint32_t base_addr, uint8_t *buf, uint32_t bytes)
  * with the SPI_*_INT bitmask constants (SPI_TX_EMPTY_INT, SPI_RX_FULL_INT,
  * SPI_RX_OVERFLOW_INT) rather than comparing the whole value.
  */
-uint32_t spi_get_interrupt_status(uint32_t base_addr)
+uint32_t spi_ll_get_interrupt_status(uint32_t base_addr)
 {
     return (RD_REG32(base_addr + SPI_ISR) & 0x3FU);
 }
@@ -513,7 +528,7 @@ uint32_t spi_get_interrupt_status(uint32_t base_addr)
 /**
  * @brief Enable SPI interrupts
  */
-void spi_enable_interrupt(uint32_t base_addr, uint32_t ir_id)
+void spi_ll_enable_interrupt(uint32_t base_addr, uint32_t ir_id)
 {
     uint32_t val;
     val = RD_REG32(base_addr + SPI_IMR);
@@ -547,7 +562,7 @@ void spi_enable_interrupt(uint32_t base_addr, uint32_t ir_id)
 /**
  * @brief Disable SPI interrupts
  */
-void spi_disable_interrupt(uint32_t base_addr, uint32_t ir_id)
+void spi_ll_disable_interrupt(uint32_t base_addr, uint32_t ir_id)
 {
     uint32_t val;
     val = RD_REG32(base_addr + SPI_IMR);
@@ -581,7 +596,7 @@ void spi_disable_interrupt(uint32_t base_addr, uint32_t ir_id)
 /**
  * @brief Clear the RX FIFO overflow interrupt by reading RXOICR.
  */
-void spi_clear_rx_overflow(uint32_t base_addr)
+void spi_ll_clear_rx_overflow(uint32_t base_addr)
 {
     (void)RD_REG32(base_addr + SPI_RXOICR);
 }

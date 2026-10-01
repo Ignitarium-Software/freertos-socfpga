@@ -161,15 +161,15 @@ int32_t qspi_init(qspi_descriptor_t *qspi_handle)
     qspi_disable_int(QSPI_ALL_INT_MASK);
 #if QSPI_ENABLE_INT_MODE
     socfpga_hpu_interrupt_t int_id;
-    socfpga_interrupt_err_t int_ret;
+    int err;
     int_id = SDM_QSPI_INTR;
-    int_ret = interrupt_register_isr(int_id, qspi_isr, qspi_handle);
-    if (int_ret != ERR_OK)
+    err = interrupt_register_isr(int_id, qspi_isr, qspi_handle);
+    if (err != 0)
     {
         return QSPI_ERROR;
     }
-    int_ret = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_QSPI);
-    if (int_ret != ERR_OK)
+    err = interrupt_enable(int_id, GIC_INTERRUPT_PRIORITY_QSPI);
+    if (err != 0)
     {
         return QSPI_ERROR;
     }

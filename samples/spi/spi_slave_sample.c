@@ -72,7 +72,6 @@
 #ifndef SPI_SLAVE_SAMPLE_NUM_XFERS
 #define SPI_SLAVE_SAMPLE_NUM_XFERS 6U
 #endif
-#define RBF_FILENAME         "/core.rbf"
 static volatile bool stop_xfers;
 
 static uint8_t master_tx[XFER_SIZE];
@@ -126,32 +125,6 @@ static void spi_done_callback(spi_xfer_status_t status, void *pparam)
     {
         (void)osal_semaphore_post(ctx->sem);
     }
-}
-
-static void load_bitstream(void)
-{
-    uint32_t file_size;
-    uint8_t *rbf_ptr;
-
-    PRINT("Reading the rbf file from sdmmc");
-    rbf_ptr = mmc_read_file(SOURCE_SDMMC, RBF_FILENAME, &file_size);
-    if (rbf_ptr == NULL)
-    {
-        ERROR("Unable to read bitstream from memory !!!");
-        return;
-    }
-
-    PRINT("Starting fpga configuration");
-    if (load_fpga_bitstream(rbf_ptr, file_size) != 0)
-    {
-        ERROR("Failed to load bitstream !!!");
-        vPortFree(rbf_ptr);
-        return;
-    }
-
-    vPortFree(rbf_ptr);
-
-    PRINT("Loaded bitstream file successfully");
 }
 
 static void spi_slave_xfer_task(void *arg)
@@ -408,8 +381,6 @@ void spi_slave_task(void)
         ERROR("Failed to create semaphores");
         return;
     }
-
-    load_bitstream();
 
     for (i = 0; i < XFER_SIZE; i++)
     {

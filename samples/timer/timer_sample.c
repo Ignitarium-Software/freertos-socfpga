@@ -51,30 +51,37 @@
 
 osal_semaphore_def_t sem_mem;
 osal_semaphore_t sem;
-void timer_callback_sample(void *arg)
+
+void timer_callback_sample(void *usr_cntxt)
 {
-    timer_handle_t timer_handle = (timer_handle_t)arg;
+    timer_handle_t htimer = (timer_handle_t)usr_cntxt;
+    if (htimer == NULL)
+    {
+        /* Avoid blocking the sample if callback context is misconfigured. */
+        osal_semaphore_post(sem);
+        return;
+    }
     /* for single shot usage stop the timer after fist interrupt */
-    timer_stop(timer_handle);
+    timer_stop(htimer);
     osal_semaphore_post(sem);
 }
 
 void timer_task(void)
 {
-    timer_handle_t timer_handle;
+    timer_handle_t htimer;
     BaseType_t l_ret_val;
     sem = osal_semaphore_create(&sem_mem);
 
     PRINT("Timer single shot usage example");
 
-    timer_handle = timer_open(TIMER_INSTANCE);
-    if (timer_handle != NULL)
+    htimer = timer_open(TIMER_INSTANCE);
+    if (htimer != NULL)
     {
-        timer_set_callback(timer_handle, timer_callback_sample, timer_handle);
+        timer_set_callback(htimer, timer_callback_sample, htimer);
 
         PRINT("Configuring the timer for 5 seconds");
-        timer_set_period_us(timer_handle, TIMER_PERIOD_US);
-        timer_start(timer_handle);
+        timer_set_period_us(htimer, TIMER_PERIOD_US);
+        timer_start(htimer);
 
     }
 
@@ -93,7 +100,7 @@ void timer_task(void)
         ERROR("Failed to get timer callback");
     }
 
-    timer_close(timer_handle);
+    timer_close(htimer);
     PRINT("Timer example completed");
 
 }

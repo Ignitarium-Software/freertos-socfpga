@@ -9,6 +9,7 @@
 #include <string.h>
 #include "osal.h"
 #include "socfpga_fcs.h"
+#include "socfpga_fcs_ll.h"
 #include "libfcs_utils.h"
 #include <libfcs_logging.h>
 #include <errno.h>
@@ -17,20 +18,22 @@
 #define SDOS_OWNER_ID_SIZE      8U
 #define HKDF_INPUT_SIZE         80U
 #define HKDF_MAX_SIZE           4096U
-
+#define LIBFCS_UPDATE           0U
+#define LIBFCS_FINALIZE         1U
+#define TAG_SIZE                32U
 
 static FCS_OSAL_INT fcs_freertos_api_binding(struct libfcs_osal_intf *intf);
-FCS_OSAL_INT fcs_freertos_open_service_session(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_open_session(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT
-fcs_freertos_close_service_session(struct fcs_cmd_context *ctx);
+fcs_freertos_close_session(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_random_number_ext(struct fcs_cmd_context *ctx);
-FCS_OSAL_INT fcs_freertos_import_service_key(struct fcs_cmd_context *ctx);
-FCS_OSAL_INT fcs_freertos_export_service_key(struct fcs_cmd_context *ctx);
-FCS_OSAL_INT fcs_freertos_remove_service_key(struct fcs_cmd_context *ctx);
-FCS_OSAL_INT fcs_freertos_get_service_key_info(struct fcs_cmd_context *ctx);
-FCS_OSAL_INT fcs_freertos_create_service_key(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_import_key(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_export_key(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_remove_key(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_get_key_info(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_create_key(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT
-fcs_freertos_service_get_provision_data(struct fcs_cmd_context *ctx);
+fcs_freertos_get_provision_data(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_counter_set(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT
 fcs_freertos_counter_set_preauthorized(struct fcs_cmd_context *ctx);
@@ -38,7 +41,13 @@ FCS_OSAL_INT fcs_freertos_hkdf_request(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_aes_crypt(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_ecdh_req(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_get_digest(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_get_digest_init(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_get_digest_update(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_get_digest_final(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_mac_verify(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_mac_verify_init(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_mac_verify_update(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_mac_verify_final(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_sdos_encrypt(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_sdos_decrypt(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_get_chip_id(struct fcs_cmd_context *ctx);
@@ -61,7 +70,17 @@ FCS_OSAL_INT fcs_freertos_ecdsa_hash_verify(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_ecdsa_sha2_data_sign(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT
 fcs_freertos_ecdsa_sha2_data_verify(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_ecdsa_data_sign_init(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_ecdsa_data_sign_update(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_ecdsa_data_sign_final(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_ecdsa_data_verify_init(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_ecdsa_data_verify_update(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_ecdsa_data_verify_final(struct fcs_cmd_context *ctx);
 FCS_OSAL_INT fcs_freertos_hps_img_validate(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_platform_get(FCS_OSAL_CHAR *platform);
+FCS_OSAL_INT fcs_freertos_aes_crypt_init(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_aes_crypt_update(struct fcs_cmd_context *ctx);
+FCS_OSAL_INT fcs_freertos_aes_crypt_final(struct fcs_cmd_context *ctx);
 
 /**
  * @brief Allocate memory of given size.
@@ -316,10 +335,10 @@ FCS_OSAL_INT fcs_fit_image_get_data_and_size(FCS_OSAL_CHAR *fit,
  *
  * @return 0 on success, otherwise value on error.
  */
-FCS_OSAL_INT fcs_freertos_open_service_session(struct fcs_cmd_context *ctx)
+FCS_OSAL_INT fcs_freertos_open_session(struct fcs_cmd_context *ctx)
 {
     char uuid[FCS_OSAL_UUID_SIZE] = {0};
-    FCS_OSAL_INT ret = run_fcs_open_service_session(uuid);
+    FCS_OSAL_INT ret = fcs_open_session(uuid);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -345,9 +364,9 @@ FCS_OSAL_INT fcs_freertos_open_service_session(struct fcs_cmd_context *ctx)
  *
  * @return 0 on success, otherwise value on error.
  */
-FCS_OSAL_INT fcs_freertos_close_service_session(struct fcs_cmd_context *ctx)
+FCS_OSAL_INT fcs_freertos_close_session(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_close_service_session(ctx->close_session.suuid);
+    FCS_OSAL_INT ret = fcs_close_session(ctx->close_session.suuid);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -364,9 +383,9 @@ FCS_OSAL_INT fcs_freertos_close_service_session(struct fcs_cmd_context *ctx)
  * @return 0 on success, otherwise value on error.
  */
 FCS_OSAL_INT
-fcs_freertos_service_get_provision_data(struct fcs_cmd_context *ctx)
+fcs_freertos_get_provision_data(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_service_get_provision_data(
+    FCS_OSAL_INT ret = fcs_get_provision_data(
             ctx->prov_data.data, ctx->prov_data.data_len);
     if (ret >= 0)
     {
@@ -385,7 +404,7 @@ fcs_freertos_service_get_provision_data(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_random_number_ext(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_random_number_ext(ctx->rng.rng,
+    FCS_OSAL_INT ret = fcs_random_number(ctx->rng.rng,
             ctx->rng.suuid,
             ctx->rng.context_id,
             ctx->rng.rng_len);
@@ -404,9 +423,9 @@ FCS_OSAL_INT fcs_freertos_random_number_ext(struct fcs_cmd_context *ctx)
  *
  * @return 0 on success, otherwise value on error.
  */
-FCS_OSAL_INT fcs_freertos_import_service_key(struct fcs_cmd_context *ctx)
+FCS_OSAL_INT fcs_freertos_import_key(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_import_service_key(ctx->import_key.suuid,
+    FCS_OSAL_INT ret = fcs_import_key(ctx->import_key.suuid,
             ctx->import_key.key,
             ctx->import_key.key_len, ctx->import_key.status,
             ctx->import_key.status_len);
@@ -425,9 +444,9 @@ FCS_OSAL_INT fcs_freertos_import_service_key(struct fcs_cmd_context *ctx)
  *
  * @return 0 on success, otherwise value on error.
  */
-FCS_OSAL_INT fcs_freertos_export_service_key(struct fcs_cmd_context *ctx)
+FCS_OSAL_INT fcs_freertos_export_key(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_export_service_key(ctx->export_key.suuid,
+    FCS_OSAL_INT ret = fcs_export_key(ctx->export_key.suuid,
             ctx->export_key.key_id,
             ctx->export_key.key, ctx->export_key.key_len);
     if (ret >= 0)
@@ -445,9 +464,9 @@ FCS_OSAL_INT fcs_freertos_export_service_key(struct fcs_cmd_context *ctx)
  *
  * @return 0 on success, otherwise value on error.
  */
-FCS_OSAL_INT fcs_freertos_remove_service_key(struct fcs_cmd_context *ctx)
+FCS_OSAL_INT fcs_freertos_remove_key(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_remove_service_key(ctx->remove_key.suuid,
+    FCS_OSAL_INT ret = fcs_remove_key(ctx->remove_key.suuid,
             ctx->remove_key.key_id);
     if (ret >= 0)
     {
@@ -464,9 +483,9 @@ FCS_OSAL_INT fcs_freertos_remove_service_key(struct fcs_cmd_context *ctx)
  *
  * @return 0 on success, otherwise value on error.
  */
-FCS_OSAL_INT fcs_freertos_get_service_key_info(struct fcs_cmd_context *ctx)
+FCS_OSAL_INT fcs_freertos_get_key_info(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_get_service_key_info(ctx->key_info.suuid,
+    FCS_OSAL_INT ret = fcs_get_key_info(ctx->key_info.suuid,
             ctx->key_info.key_id,
             ctx->key_info.info, ctx->key_info.info_len);
     if (ret >= 0)
@@ -485,9 +504,9 @@ FCS_OSAL_INT fcs_freertos_get_service_key_info(struct fcs_cmd_context *ctx)
  *
  * @return 0 on success, otherwise value on error.
  */
-FCS_OSAL_INT fcs_freertos_create_service_key(struct fcs_cmd_context *ctx)
+FCS_OSAL_INT fcs_freertos_create_key(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_create_service_key(ctx->create_key.suuid,
+    FCS_OSAL_INT ret = fcs_create_key(ctx->create_key.suuid,
             ctx->create_key.key,
             ctx->create_key.key_len, ctx->create_key.status,
             ctx->create_key.status_len);
@@ -508,7 +527,7 @@ FCS_OSAL_INT fcs_freertos_create_service_key(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_counter_set(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_send_certificate(ctx->ctr_set.ccert,
+    FCS_OSAL_INT ret = fcs_send_certificate(ctx->ctr_set.ccert,
             ctx->ctr_set.ccert_len, (uint32_t*)ctx->ctr_set.status);
     if (ret >= 0)
     {
@@ -530,7 +549,7 @@ FCS_OSAL_INT fcs_freertos_counter_set(struct fcs_cmd_context *ctx)
 FCS_OSAL_INT
 fcs_freertos_counter_set_preauthorized(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_service_counter_set_preauthorized(
+    FCS_OSAL_INT ret = fcs_counter_set_preauthorized(
             ctx->ctr_set_preauth.ctr_type,
             ctx->ctr_set_preauth.ctr_val, ctx->ctr_set_preauth.test);
     if (ret >= 0)
@@ -577,7 +596,7 @@ FCS_OSAL_INT fcs_freertos_hkdf_request(struct fcs_cmd_context *ctx)
     (void) memcpy(temp, ctx->hkdf_req.output_key_obj,
             ctx->hkdf_req.output_key_obj_len);
 
-    FCS_OSAL_INT ret = run_fcs_hkdf_request(ctx->hkdf_req.suuid,
+    FCS_OSAL_INT ret = fcs_request_hkdf(ctx->hkdf_req.suuid,
             ctx->hkdf_req.key_id,
             ctx->hkdf_req.step_type, ctx->hkdf_req.mac_mode, input_data,
             ctx->hkdf_req.output_key_obj_len,
@@ -601,7 +620,7 @@ FCS_OSAL_INT fcs_freertos_hkdf_request(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_get_chip_id(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_get_chip_id(ctx->chip_id.chip_id_lo,
+    FCS_OSAL_INT ret = fcs_obtain_chip_id(ctx->chip_id.chip_id_lo,
             ctx->chip_id.chip_id_hi);
     if (ret >= 0)
     {
@@ -621,7 +640,7 @@ FCS_OSAL_INT fcs_freertos_get_chip_id(struct fcs_cmd_context *ctx)
 FCS_OSAL_INT
 fcs_freertos_attestation_get_certificate(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_attestation_get_certificate(
+    FCS_OSAL_INT ret = fcs_attestation_obtain_certificate(
             ctx->attestation_cert.cert_request,
             ctx->attestation_cert.cert, ctx->attestation_cert.cert_size);
     if (ret >= 0)
@@ -642,7 +661,7 @@ fcs_freertos_attestation_get_certificate(struct fcs_cmd_context *ctx)
 FCS_OSAL_INT
 fcs_freertos_attestation_cert_reload(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_attestation_certificate_reload(
+    FCS_OSAL_INT ret = fcs_attestation_reload_certificate(
             ctx->attestation_cert_reload.cert_request);
     if (ret >= 0)
     {
@@ -662,7 +681,7 @@ fcs_freertos_attestation_cert_reload(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_mctp_cmd_send(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_mctp_cmd_send(ctx->mctp.mctp_req,
+    FCS_OSAL_INT ret = fcs_send_mctp_cmd(ctx->mctp.mctp_req,
             ctx->mctp.mctp_req_len,
             ctx->mctp.mctp_resp, ctx->mctp.mctp_resp_len);
     if (ret >= 0)
@@ -682,7 +701,7 @@ FCS_OSAL_INT fcs_freertos_mctp_cmd_send(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_get_jtag_idcode(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_get_jtag_idcode(ctx->jtag_id.jtag_idcode);
+    FCS_OSAL_INT ret = fcs_obtain_jtag_idcode(ctx->jtag_id.jtag_idcode);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -700,7 +719,7 @@ FCS_OSAL_INT fcs_freertos_get_jtag_idcode(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_get_device_identity(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_get_device_identity(
+    FCS_OSAL_INT ret = fcs_obtain_device_identity(
             ctx->device_identity.identity,
             ctx->device_identity.identity_len);
     if (ret >= 0)
@@ -720,7 +739,7 @@ FCS_OSAL_INT fcs_freertos_get_device_identity(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_qspi_open(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_qspi_open();
+    FCS_OSAL_INT ret = fcs_open_qspi();
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -738,7 +757,7 @@ FCS_OSAL_INT fcs_freertos_qspi_open(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_qspi_close(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_qspi_close();
+    FCS_OSAL_INT ret = fcs_close_qspi();
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -757,7 +776,7 @@ FCS_OSAL_INT fcs_freertos_qspi_close(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_qspi_set_cs(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_qspi_set_cs(ctx->qspi_cs.chipsel);
+    FCS_OSAL_INT ret = fcs_set_qspi_cs(ctx->qspi_cs.chipsel);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -775,7 +794,7 @@ FCS_OSAL_INT fcs_freertos_qspi_set_cs(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_qspi_read(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_qspi_read(ctx->qspi_write.qspi_addr,
+    FCS_OSAL_INT ret = fcs_read_qspi(ctx->qspi_write.qspi_addr,
             ctx->qspi_write.len,
             ctx->qspi_write.buffer);
     if (ret >= 0)
@@ -794,7 +813,7 @@ FCS_OSAL_INT fcs_freertos_qspi_read(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_qspi_write(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_qspi_write(ctx->qspi_write.qspi_addr,
+    FCS_OSAL_INT ret = fcs_write_qspi(ctx->qspi_write.qspi_addr,
             ctx->qspi_write.len,
             ctx->qspi_write.buffer);
     if (ret >= 0)
@@ -814,7 +833,7 @@ FCS_OSAL_INT fcs_freertos_qspi_write(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_qspi_erase(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_qspi_erase(ctx->qspi_erase.qspi_addr,
+    FCS_OSAL_INT ret = fcs_erase_qspi(ctx->qspi_erase.qspi_addr,
             ctx->qspi_erase.len);
     if (ret >= 0)
     {
@@ -833,23 +852,11 @@ FCS_OSAL_INT fcs_freertos_qspi_erase(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_aes_crypt(struct fcs_cmd_context *ctx)
 {
-    if (ctx->aes.mode == FCS_AES_GCM_GHASH)
-    {
-        *ctx->aes.op_len = 0;
-    }
-    else
-    {
-        *ctx->aes.op_len = ctx->aes.ip_len;
-    }
-    FCS_OSAL_INT ret = run_fcs_aes_cryption(ctx->aes.suuid, ctx->aes.kid,
-            ctx->aes.cid,
-            ctx->aes.crypt,
-            ctx->aes.mode, ctx->aes.iv_source, ctx->aes.iv,
-            ctx->aes.tag_len,
-            ctx->aes.aad_len,
-            ctx->aes.aad,
-            ctx->aes.tag,
-            ctx->aes.input, ctx->aes.ip_len, ctx->aes.output);
+    FCS_OSAL_INT ret = fcs_aes_cryption(ctx->aes.suuid, ctx->aes.kid,
+            ctx->aes.cid, ctx->aes.crypt, ctx->aes.mode, ctx->aes.iv_source,
+            ctx->aes.iv, ctx->aes.tag_len, ctx->aes.aad_len, ctx->aes.aad,
+            ctx->aes.tag, ctx->aes.input, ctx->aes.ip_len, ctx->aes.output,
+            ctx->aes.op_len);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -860,7 +867,7 @@ FCS_OSAL_INT fcs_freertos_aes_crypt(struct fcs_cmd_context *ctx)
 
 FCS_OSAL_INT fcs_freertos_ecdh_req(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_ecdh_request(ctx->ecdh_req.suuid,
+    FCS_OSAL_INT ret = fcs_request_ecdh(ctx->ecdh_req.suuid,
             ctx->ecdh_req.kid,
             ctx->ecdh_req.cid,
             ctx->ecdh_req.ecc_curve, ctx->ecdh_req.pubkey,
@@ -883,11 +890,60 @@ FCS_OSAL_INT fcs_freertos_ecdh_req(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_get_digest(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_get_digest(ctx->dgst.suuid,
+    FCS_OSAL_INT ret = fcs_obtain_digest(ctx->dgst.suuid,
             ctx->dgst.context_id,
             ctx->dgst.key_id,
             ctx->dgst.sha_op_mode, ctx->dgst.sha_digest_sz, ctx->dgst.src,
             ctx->dgst.src_len, ctx->dgst.digest, ctx->dgst.digest_len);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_get_digest_init(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_get_digest_init(ctx->dgst.suuid,
+            ctx->dgst.context_id,
+            ctx->dgst.key_id,
+            ctx->dgst.sha_op_mode,
+            ctx->dgst.sha_digest_sz);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_get_digest_update(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_get_digest_update(ctx->dgst.suuid,
+            ctx->dgst.context_id,
+            ctx->dgst.src,
+            ctx->dgst.src_len,
+            ctx->dgst.digest,
+            ctx->dgst.digest_len,
+            FCS_UPDATE);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_get_digest_final(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_get_digest_update(ctx->dgst.suuid,
+            ctx->dgst.context_id,
+            ctx->dgst.src,
+            ctx->dgst.src_len,
+            ctx->dgst.digest,
+            ctx->dgst.digest_len,
+            LIBFCS_FINALIZE);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -905,13 +961,76 @@ FCS_OSAL_INT fcs_freertos_get_digest(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_mac_verify(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_mac_verify(ctx->mac_verify.suuid,
+    FCS_OSAL_INT ret = fcs_do_mac_verification(ctx->mac_verify.suuid,
             ctx->mac_verify.context_id,
             ctx->mac_verify.key_id, ctx->mac_verify.sha_digest_sz,
             ctx->mac_verify.src,
             ctx->mac_verify.src_size, ctx->mac_verify.dst,
             ctx->mac_verify.dst_size,
             ctx->mac_verify.user_data_size);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_mac_verify_init(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_mac_verify_init(ctx->mac_verify.suuid,
+            ctx->mac_verify.context_id,
+            ctx->mac_verify.key_id,
+            ctx->mac_verify.sha_digest_sz);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_mac_verify_update(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_CHAR *mac_data = ctx->mac_verify.src +
+            ctx->mac_verify.user_data_size;
+    FCS_OSAL_INT ret = fcs_mac_verify_update(ctx->mac_verify.suuid,
+            ctx->mac_verify.context_id,
+            ctx->mac_verify.src,
+            ctx->mac_verify.src_size,
+            mac_data,
+            0U,
+            ctx->mac_verify.dst,
+            ctx->mac_verify.dst_size,
+            LIBFCS_UPDATE);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_mac_verify_final(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_CHAR *mac_data = ctx->mac_verify.src +
+            ctx->mac_verify.user_data_size;
+    FCS_OSAL_U32 mac_size = 0U;
+
+    if (ctx->mac_verify.src_size >= ctx->mac_verify.user_data_size)
+    {
+        mac_size = ctx->mac_verify.src_size - ctx->mac_verify.user_data_size;
+    }
+
+    FCS_OSAL_INT ret = fcs_mac_verify_update(ctx->mac_verify.suuid,
+            ctx->mac_verify.context_id,
+            ctx->mac_verify.src,
+            ctx->mac_verify.user_data_size,
+            mac_data,
+            mac_size,
+            ctx->mac_verify.dst,
+            ctx->mac_verify.dst_size,
+            LIBFCS_FINALIZE);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -929,9 +1048,93 @@ FCS_OSAL_INT fcs_freertos_mac_verify(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_hps_img_validate(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_send_certificate(
+    FCS_OSAL_INT ret = fcs_send_certificate(
             ctx->hps_img_validate.vab_cert,
             ctx->hps_img_validate.vab_cert_len, ctx->hps_img_validate.resp);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_platform_get(FCS_OSAL_CHAR *platform)
+{
+    if (platform == NULL) {
+        FCS_LOG_ERR("Invalid argument: platform is NULL\n");
+        return -1;
+    }
+
+    *platform = '2';
+    return 0;
+}
+
+FCS_OSAL_INT fcs_freertos_aes_crypt_init(struct fcs_cmd_context *ctx)
+{
+    /* Libfcs always passes 128 bit tag */
+    FCS_OSAL_INT ret = fcs_aes_crypt_init(ctx->aes.suuid,
+            ctx->aes.cid,
+            ctx->aes.kid,
+            ctx->aes.mode,
+            ctx->aes.crypt,
+            ctx->aes.iv_source,
+            ctx->aes.iv,
+            FCS_AES_TAG_128,
+            ctx->aes.aad_len);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_aes_crypt_update(struct fcs_cmd_context *ctx)
+{
+    if (ctx->aes.mode == FCS_AES_GCM_GHASH)
+    {
+        *ctx->aes.op_len = 0;
+    }
+    else
+    {
+        *ctx->aes.op_len = ctx->aes.ip_len;
+    }
+
+    FCS_OSAL_INT ret = fcs_aes_update(ctx->aes.suuid, ctx->aes.cid,
+            ctx->aes.input, ctx->aes.ip_len, ctx->aes.output,
+            *ctx->aes.op_len, ctx->aes.aad, ctx->aes.aad_len,
+            NULL, 0, FCS_UPDATE);
+
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_aes_crypt_final(struct fcs_cmd_context *ctx)
+{
+    /* We only pass tag when its gcm decrypt mode */
+    uint32_t tag_len = 0;
+    if (ctx->aes.mode == FCS_AES_GCM && ctx->aes.crypt == FCS_AES_DECRYPT)
+    {
+        tag_len = ctx->aes.tag_len;
+    }
+    if (ctx->aes.mode == FCS_AES_GCM_GHASH)
+    {
+        *ctx->aes.op_len = 0;
+    }
+    else
+    {
+        *ctx->aes.op_len = ctx->aes.ip_len;
+    }
+
+    FCS_OSAL_INT ret = fcs_aes_update(ctx->aes.suuid, ctx->aes.cid,
+            ctx->aes.input, ctx->aes.ip_len, ctx->aes.output,
+            *ctx->aes.op_len, ctx->aes.aad, ctx->aes.aad_len,
+            ctx->aes.tag, tag_len, FCS_FINALIZE);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -951,7 +1154,7 @@ FCS_OSAL_INT fcs_freertos_sdos_encrypt(struct fcs_cmd_context *ctx)
 {
     (void) memcpy(&ctx->sdos.own, ctx->sdos.src + SDOS_OWNER_ID_OFFSET,
             SDOS_OWNER_ID_SIZE);
-    FCS_OSAL_INT ret = run_fcs_sdos_encrypt(ctx->sdos.suuid,
+    FCS_OSAL_INT ret = fcs_encrypt_sdos(ctx->sdos.suuid,
             ctx->sdos.context_id,
             ctx->sdos.src, ctx->sdos.src_size, ctx->sdos.dst,
             ctx->sdos.dst_size);
@@ -974,7 +1177,7 @@ FCS_OSAL_INT fcs_freertos_sdos_decrypt(struct fcs_cmd_context *ctx)
 {
     (void) memcpy(&ctx->sdos.own, ctx->sdos.src + SDOS_OWNER_ID_OFFSET,
             SDOS_OWNER_ID_SIZE);
-    FCS_OSAL_INT ret = run_fcs_sdos_decrypt(ctx->sdos.suuid,
+    FCS_OSAL_INT ret = fcs_decrypt_sdos(ctx->sdos.suuid,
             ctx->sdos.context_id,
             ctx->sdos.src, ctx->sdos.src_size, ctx->sdos.dst,
             ctx->sdos.dst_size,
@@ -996,7 +1199,7 @@ FCS_OSAL_INT fcs_freertos_sdos_decrypt(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_ecdsa_get_pub_key(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_ecdsa_get_public_key(ctx->ecdsa_pub_key.suuid,
+    FCS_OSAL_INT ret = fcs_ecdsa_get_public_key(ctx->ecdsa_pub_key.suuid,
             ctx->ecdsa_pub_key.context_id,
             ctx->ecdsa_pub_key.key_id, ctx->ecdsa_pub_key.ecc_curve,
             ctx->ecdsa_pub_key.pubkey, ctx->ecdsa_pub_key.pubkey_len);
@@ -1017,7 +1220,7 @@ FCS_OSAL_INT fcs_freertos_ecdsa_get_pub_key(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_ecdsa_hash_sign(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_ecdsa_hash_sign(ctx->ecdsa_hash_sign.suuid,
+    FCS_OSAL_INT ret = fcs_ecdsa_hash_signing(ctx->ecdsa_hash_sign.suuid,
             ctx->ecdsa_hash_sign.context_id,
             ctx->ecdsa_hash_sign.key_id, ctx->ecdsa_hash_sign.ecc_curve,
             ctx->ecdsa_hash_sign.src, ctx->ecdsa_hash_sign.src_len,
@@ -1039,7 +1242,7 @@ FCS_OSAL_INT fcs_freertos_ecdsa_hash_sign(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_ecdsa_hash_verify(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_ecdsa_hash_verify(ctx->ecdsa_hash_verify.suuid,
+    FCS_OSAL_INT ret = fcs_do_ecdsa_hash_verification(ctx->ecdsa_hash_verify.suuid,
             ctx->ecdsa_hash_verify.context_id,
             ctx->ecdsa_hash_verify.key_id,
             ctx->ecdsa_hash_verify.ecc_curve, ctx->ecdsa_hash_verify.src,
@@ -1066,7 +1269,7 @@ FCS_OSAL_INT fcs_freertos_ecdsa_hash_verify(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_ecdsa_sha2_data_sign(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_ecdsa_sha2_data_sign(
+    FCS_OSAL_INT ret = fcs_ecdsa_sha2_data_signing(
             ctx->ecdsa_sha2_data_sign.suuid,
             ctx->ecdsa_sha2_data_sign.context_id,
             ctx->ecdsa_sha2_data_sign.key_id,
@@ -1075,6 +1278,116 @@ FCS_OSAL_INT fcs_freertos_ecdsa_sha2_data_sign(struct fcs_cmd_context *ctx)
             ctx->ecdsa_sha2_data_sign.src_len,
             ctx->ecdsa_sha2_data_sign.dst,
             ctx->ecdsa_sha2_data_sign.dst_len);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_ecdsa_data_sign_init(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_ecdsa_sha2_data_sign_init(
+            ctx->ecdsa_sha2_data_sign.suuid,
+            ctx->ecdsa_sha2_data_sign.context_id,
+            ctx->ecdsa_sha2_data_sign.key_id,
+            ctx->ecdsa_sha2_data_sign.ecc_curve);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_ecdsa_data_sign_update(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_ecdsa_sha2_data_sign_update(
+            ctx->ecdsa_sha2_data_sign.suuid,
+            ctx->ecdsa_sha2_data_sign.context_id,
+            ctx->ecdsa_sha2_data_sign.src,
+            ctx->ecdsa_sha2_data_sign.src_len,
+            ctx->ecdsa_sha2_data_sign.dst,
+            ctx->ecdsa_sha2_data_sign.dst_len,
+            LIBFCS_UPDATE);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_ecdsa_data_sign_final(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_ecdsa_sha2_data_sign_update(
+            ctx->ecdsa_sha2_data_sign.suuid,
+            ctx->ecdsa_sha2_data_sign.context_id,
+            ctx->ecdsa_sha2_data_sign.src,
+            ctx->ecdsa_sha2_data_sign.src_len,
+            ctx->ecdsa_sha2_data_sign.dst,
+            ctx->ecdsa_sha2_data_sign.dst_len,
+            LIBFCS_FINALIZE);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_ecdsa_data_verify_init(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_ecdsa_sha2_data_sign_verification_init(
+            ctx->ecdsa_sha2_data_verify.suuid,
+            ctx->ecdsa_sha2_data_verify.context_id,
+            ctx->ecdsa_sha2_data_verify.key_id,
+            ctx->ecdsa_sha2_data_verify.ecc_curve);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_ecdsa_data_verify_update(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_ecdsa_sha2_data_sign_verification_update(
+            ctx->ecdsa_sha2_data_verify.suuid,
+            ctx->ecdsa_sha2_data_verify.context_id,
+            ctx->ecdsa_sha2_data_verify.src,
+            ctx->ecdsa_sha2_data_verify.user_data_sz,
+            ctx->ecdsa_sha2_data_verify.signature,
+            0,
+            ctx->ecdsa_sha2_data_verify.pubkey,
+            0,
+            ctx->ecdsa_sha2_data_verify.dst,
+            ctx->ecdsa_sha2_data_verify.dst_len,
+            FCS_UPDATE);
+    if (ret >= 0)
+    {
+        *ctx->error_code_addr = ret;
+        return 0;
+    }
+    return ret;
+}
+
+FCS_OSAL_INT fcs_freertos_ecdsa_data_verify_final(struct fcs_cmd_context *ctx)
+{
+    FCS_OSAL_INT ret = fcs_ecdsa_sha2_data_sign_verification_update(
+            ctx->ecdsa_sha2_data_verify.suuid,
+            ctx->ecdsa_sha2_data_verify.context_id,
+            ctx->ecdsa_sha2_data_verify.src,
+            ctx->ecdsa_sha2_data_verify.user_data_sz,
+            ctx->ecdsa_sha2_data_verify.signature,
+            ctx->ecdsa_sha2_data_verify.signature_len,
+            ctx->ecdsa_sha2_data_verify.pubkey,
+            ctx->ecdsa_sha2_data_verify.pubkey_len,
+            ctx->ecdsa_sha2_data_verify.dst,
+            ctx->ecdsa_sha2_data_verify.dst_len,
+            FCS_FINALIZE);
     if (ret >= 0)
     {
         *ctx->error_code_addr = ret;
@@ -1092,7 +1405,7 @@ FCS_OSAL_INT fcs_freertos_ecdsa_sha2_data_sign(struct fcs_cmd_context *ctx)
  */
 FCS_OSAL_INT fcs_freertos_ecdsa_sha2_data_verify(struct fcs_cmd_context *ctx)
 {
-    FCS_OSAL_INT ret = run_fcs_ecdsa_sha2_data_sign_verify(
+    FCS_OSAL_INT ret = fcs_do_ecdsa_sha2_data_sign_verification(
             ctx->ecdsa_sha2_data_verify.suuid,
             ctx->ecdsa_sha2_data_verify.context_id,
             ctx->ecdsa_sha2_data_verify.key_id,
@@ -1127,20 +1440,26 @@ static FCS_OSAL_INT fcs_freertos_api_binding(struct libfcs_osal_intf *intf)
         return -1;
     }
 
-    intf->open_service_session = fcs_freertos_open_service_session;
-    intf->close_service_session = fcs_freertos_close_service_session;
+    intf->open_service_session = fcs_freertos_open_session;
+    intf->close_service_session = fcs_freertos_close_session;
     intf->random_number_ext = fcs_freertos_random_number_ext;
-    intf->import_service_key = fcs_freertos_import_service_key;
-    intf->export_service_key = fcs_freertos_export_service_key;
-    intf->remove_service_key = fcs_freertos_remove_service_key;
-    intf->get_service_key_info = fcs_freertos_get_service_key_info;
-    intf->create_service_key = fcs_freertos_create_service_key;
-    intf->get_provision_data = fcs_freertos_service_get_provision_data;
+    intf->import_service_key = fcs_freertos_import_key;
+    intf->export_service_key = fcs_freertos_export_key;
+    intf->remove_service_key = fcs_freertos_remove_key;
+    intf->get_service_key_info = fcs_freertos_get_key_info;
+    intf->create_service_key = fcs_freertos_create_key;
+    intf->get_provision_data = fcs_freertos_get_provision_data;
     intf->counter_set = fcs_freertos_counter_set;
     intf->counter_set_preauthorized = fcs_freertos_counter_set_preauthorized;
     intf->hkdf_request = fcs_freertos_hkdf_request;
     intf->get_digest = fcs_freertos_get_digest;
+    intf->get_digest_init = fcs_freertos_get_digest_init;
+    intf->get_digest_update = fcs_freertos_get_digest_update;
+    intf->get_digest_final = fcs_freertos_get_digest_final;
     intf->mac_verify = fcs_freertos_mac_verify;
+    intf->mac_verify_init = fcs_freertos_mac_verify_init;
+    intf->mac_verify_update = fcs_freertos_mac_verify_update;
+    intf->mac_verify_final = fcs_freertos_mac_verify_final;
     intf->aes_crypt = fcs_freertos_aes_crypt;
     intf->ecdh_req = fcs_freertos_ecdh_req;
     intf->get_chip_id = fcs_freertos_get_chip_id;
@@ -1163,7 +1482,17 @@ static FCS_OSAL_INT fcs_freertos_api_binding(struct libfcs_osal_intf *intf)
     intf->ecdsa_hash_verify = fcs_freertos_ecdsa_hash_verify;
     intf->ecdsa_sha2_data_sign = fcs_freertos_ecdsa_sha2_data_sign;
     intf->ecdsa_sha2_data_verify = fcs_freertos_ecdsa_sha2_data_verify;
+    intf->ecdsa_data_sign_init = fcs_freertos_ecdsa_data_sign_init;
+    intf->ecdsa_data_sign_update = fcs_freertos_ecdsa_data_sign_update;
+    intf->ecdsa_data_sign_final = fcs_freertos_ecdsa_data_sign_final;
+    intf->ecdsa_data_verify_init = fcs_freertos_ecdsa_data_verify_init;
+    intf->ecdsa_data_verify_update = fcs_freertos_ecdsa_data_verify_update;
+    intf->ecdsa_data_verify_final = fcs_freertos_ecdsa_data_verify_final;
+    intf->platform_get = fcs_freertos_platform_get;
     intf->hps_img_validate = fcs_freertos_hps_img_validate;
+    intf->aes_crypt_init = fcs_freertos_aes_crypt_init;
+    intf->aes_crypt_update = fcs_freertos_aes_crypt_update;
+    intf->aes_crypt_final = fcs_freertos_aes_crypt_final;
 
     return 0;
 }
